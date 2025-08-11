@@ -10,13 +10,13 @@ typedef struct {
     double fx, fy, fz;
 } Body;
 
-/* Initialize bodies with placeholder values */
+/* Initialize bodies with values */
 void init_bodies(Body *bodies, size_t n);
 
-/* Compute forces between bodies (placeholder) */
+/* Compute forces between bodies */
 void compute_forces(Body *bodies, size_t n);
 
-/* Update positions/velocities based on forces (placeholder) */
+/* Update positions/velocities based on forces */
 void update_bodies(Body *bodies, size_t n, double dt);
 
 #endif /* NBODY_H */
