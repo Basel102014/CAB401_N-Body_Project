@@ -3,8 +3,8 @@
 
 #include <stddef.h>
 
-#define G     1.0      /* choose units so this is convenient */
-#define EPS2  1e-6      /* softening squared */
+#define G     1.0      
+#define EPS2  1e-6     
 
 typedef struct {
     double mass;
