@@ -110,11 +110,20 @@ int main(int argc, char **argv)
     }
 
     init_bodies(bodies, n);
-    int dt = 1e-3; // time step in seconds
+    double dt = 1e-3; // time step in seconds
     for (size_t step = 0; step < steps; ++step)
     {
+        printf("\n=== step %zu ===\n", step);
+        for (size_t i = 0; i < n; ++i) {
+            printf("[%3zu] x=% .6f y=% .6f z=% .6f  vx=% .6f vy=% .6f vz=% .6f\n",
+                i,
+                bodies[i].x, bodies[i].y, bodies[i].z,
+                bodies[i].vx, bodies[i].vy, bodies[i].vz);
+        }
+        fflush(stdout);
+
         compute_forces(bodies, n);
-        update_bodies(bodies, n, dt);
+        update_bodies(bodies, n, dt);   
     }
 
     printf("Sequential simulation complete.\n");
