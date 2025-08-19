@@ -11,11 +11,11 @@ Includes a sequential solver. The sequential build has an SDL2 viewer for real-t
 - Tweakable integrator params: DT, SUBSTEPS, G, EPS2
 
 ## Repository Layout
-nbody.h          — Body struct, G/EPS2 defines, prototypes
-nbody_seq.c      — physics + main (sequential)
-viewer.h / viewer.c — SDL2 renderer and camera controls
-nbody_parallel.c — parallel version (not implemented)
-Makefile         — builds seq (with SDL2) and keeps tree clean (no .o files)
+- nbody.h          — Body struct, G/EPS2 defines, prototypes
+- nbody_seq.c      — physics + main (sequential)
+- viewer.h / viewer.c — SDL2 renderer and camera controls
+- nbody_parallel.c — parallel version (not implemented)
+- Makefile         — builds seq (with SDL2) and keeps tree clean (no .o files)
 
 ## Prerequisites
 - GCC or Clang
