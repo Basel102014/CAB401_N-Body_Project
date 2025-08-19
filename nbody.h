@@ -3,8 +3,8 @@
 
 #include <stddef.h>
 
-#define G     1.0      
-#define EPS2  1e-6     
+#define G     1.0   // Gravitational constant      
+#define EPS2  1e-2  // Softening factor to avoid singularities    
 
 typedef struct {
     double mass;
