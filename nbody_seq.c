@@ -63,16 +63,24 @@ void update_bodies(Body *bodies, size_t n, double dt)
     }
 }
 
+static inline void sim_step(Body *b, size_t n, double dt)
+{
+    compute_forces(b, n);
+    update_bodies(b, n, dt);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3)
     {
-        fprintf(stderr, "Usage: %s number_of_particles timesteps\n", argv[0]);
+        fprintf(stderr, "Usage: %s number_of_particles timesteps [stride]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     size_t n = strtoull(argv[1], NULL, 10);
-    size_t steps = strtoull(argv[2], NULL, 10); // 0 = run until close
+    size_t steps = strtoull(argv[2], NULL, 10);
+    size_t stride = (argc >= 4) ? strtoull(argv[3], NULL, 10) : 10; // snapshot every 'stride' steps
+    const double dt = 1e-3;
 
     Body *bodies = calloc(n, sizeof(Body));
     if (!bodies)
@@ -80,12 +88,55 @@ int main(int argc, char **argv)
         perror("calloc");
         return EXIT_FAILURE;
     }
-
     init_bodies(bodies, n);
 
-    // hand off to the viewer
-    viewer_run(bodies, n, steps);
+    size_t frames = (steps + stride - 1) / stride;
+    Snapshots snaps = {.xyz = malloc(frames * n * 3 * sizeof(float)), .frames = frames, .n = n};
+    if (!snaps.xyz)
+    {
+        perror("malloc snaps");
+        free(bodies);
+        return EXIT_FAILURE;
+    }
 
+    // capture masses (used for size mapping in viewer)
+    double *masses = malloc(n * sizeof(double));
+    if (!masses)
+    {
+        perror("malloc masses");
+        free(snaps.xyz);
+        free(bodies);
+        return EXIT_FAILURE;
+    }
+    for (size_t i = 0; i < n; ++i)
+        masses[i] = bodies[i].mass;
+
+    // --- headless precompute + timing ---
+    size_t f = 0;
+    for (size_t s = 0; s < steps; ++s)
+    {
+        sim_step(bodies, n, dt);
+        if ((s % stride) == 0)
+        {
+            float *dst = snaps.xyz + (size_t)f * (size_t)n * 3u;
+            for (size_t i = 0; i < n; ++i)
+            {
+                dst[i * 3 + 0] = (float)bodies[i].x;
+                dst[i * 3 + 1] = (float)bodies[i].y;
+                dst[i * 3 + 2] = (float)bodies[i].z;
+            }
+            ++f;
+        }
+    }
+
+    // double pairs = 0.5 * (double)n * (double)(n - 1);
+    // double interactions = pairs * (double)steps;
+
+    // --- playback viewer ---
+    viewer_play(&snaps, masses);
+
+    free(masses);
+    free(snaps.xyz);
     free(bodies);
     return EXIT_SUCCESS;
 }
