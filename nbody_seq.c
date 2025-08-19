@@ -24,7 +24,7 @@ void init_bodies(Body *bodies, size_t n)
 
 void compute_forces(Body *bodies, size_t n)
 {
-    // Pairwise interactions (upper triangle), apply equal & opposite forces
+    // Pairwise interactions, apply equal & opposite forces
     for (size_t i = 0; i < n; ++i)
     {
         const double mix = bodies[i].mass;
