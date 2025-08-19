@@ -21,14 +21,7 @@ void init_bodies(Body *bodies, size_t n) {
 }
 
 void compute_forces(Body *bodies, size_t n) {
-    // 1) Zero force accumulators
-    for (size_t i = 0; i < n; ++i) {
-        bodies[i].fx = 0.0;
-        bodies[i].fy = 0.0;
-        bodies[i].fz = 0.0;
-    }
-
-    // 2) Pairwise interactions (upper triangle), apply equal & opposite forces
+    // Pairwise interactions (upper triangle), apply equal & opposite forces
     for (size_t i = 0; i < n; ++i) {
         const double mix = bodies[i].mass;
         const double xi  = bodies[i].x, yi = bodies[i].y, zi = bodies[i].z;
@@ -60,11 +53,31 @@ void compute_forces(Body *bodies, size_t n) {
 
 
 void update_bodies(Body *bodies, size_t n, double dt) {
-    (void)bodies;
-    (void)n;
-    (void)dt;
-    /* TODO: update velocities and positions */
+    for (size_t i = 0; i < n; ++i) {
+        const double m = bodies[i].mass;
+        if (m <= 0.0) continue;            // guard against invalid mass
+
+        // a = F / m
+        const double ax = bodies[i].fx / m;
+        const double ay = bodies[i].fy / m;
+        const double az = bodies[i].fz / m;
+
+        // semi-implicit Euler: v(t+dt) = v(t) + a*dt
+        bodies[i].vx += ax * dt;
+        bodies[i].vy += ay * dt;
+        bodies[i].vz += az * dt;
+
+        // then x(t+dt) = x(t) + v(t+dt)*dt
+        bodies[i].x  += bodies[i].vx * dt;
+        bodies[i].y  += bodies[i].vy * dt;
+        bodies[i].z  += bodies[i].vz * dt;
+    }
+
+    for (size_t i = 0; i < n; ++i) { bodies[i].fx = bodies[i].fy = bodies[i].fz = 0.0; }
+    printf("Updated positions and velocities for %zu bodies.\n", n);
+    fflush(stdout);
 }
+
 
 int main(int argc, char **argv) {
     if (argc < 3) {
