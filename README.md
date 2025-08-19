@@ -59,7 +59,7 @@ Parallel (not implemented yet):
 
 ## Physics Model
 Bodies are point masses with gravitational force:
-F_ij = G * m_i * m_j / (r^2 + EPS2)^(3/2) * r_vec
+- F_ij = G * m_i * m_j / (r^2 + EPS2)^(3/2) * r_vec
 
 Integrator: semi-implicit (symplectic) Euler
 - v(t+dt) = v(t) + a(t) * dt
