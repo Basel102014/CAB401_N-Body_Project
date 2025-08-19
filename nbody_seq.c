@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "nbody.h"
-#include "viewer.h" // <- the new module
+#include "viewer.h"
 
 void init_bodies(Body *bodies, size_t n)
 {
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 
     init_bodies(bodies, n);
 
-    // hand off to the viewer (which will call your physics each frame)
+    // hand off to the viewer
     viewer_run(bodies, n, steps);
 
     free(bodies);

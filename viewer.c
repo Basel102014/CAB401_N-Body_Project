@@ -43,7 +43,7 @@ static inline double clampd(double v, double a, double b)
     return v < a ? a : (v > b ? b : v);
 }
 
-// draw a filled circle (no extra libs)
+// draw a filled circle
 static void draw_filled_circle(SDL_Renderer *ren, int cx, int cy, int r)
 {
     if (r <= 0)
@@ -143,7 +143,7 @@ void viewer_run(Body *bodies, size_t n, size_t steps)
         return;
     }
 
-    // Camera: look at origin from a bit away at ~-30°
+    // Camera settings
     double yaw = -45.0 * (M_PI / 180.0);
     double pitch = -30.0 * (M_PI / 180.0);
     double R = 20.0;
