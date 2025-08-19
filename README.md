@@ -1,7 +1,7 @@
 # N-Body Simulation (3D)
 
 A simple, fast 3D N-Body gravitational simulation in C.
-Includes a sequential solver and a PThreads version. The sequential build has an SDL2 viewer for real-time visualization with a free-fly camera.
+Includes a sequential solver. The sequential build has an SDL2 viewer for real-time visualization with a free-fly camera.
 
 ## Features
 - 3D Newtonian gravity with softening (EPS2)
@@ -9,13 +9,12 @@ Includes a sequential solver and a PThreads version. The sequential build has an
 - Parallel solver using PThreads (pairwise O(N^2) split)
 - SDL2 viewer (depth-sorted sprites, perspective camera, gentle depth dim/size)
 - Tweakable integrator params: DT, SUBSTEPS, G, EPS2
-- Clean separation: physics (nbody_seq.c, nbody.h) vs rendering (viewer.c, viewer.h)
 
 ## Repository Layout
 nbody.h          — Body struct, G/EPS2 defines, prototypes
 nbody_seq.c      — physics + main (sequential)
 viewer.h / viewer.c — SDL2 renderer and camera controls
-nbody_parallel.c — parallel version (headless; no viewer)
+nbody_parallel.c — parallel version (not implemented)
 Makefile         — builds seq (with SDL2) and keeps tree clean (no .o files)
 
 ## Prerequisites
@@ -24,22 +23,18 @@ Makefile         — builds seq (with SDL2) and keeps tree clean (no .o files)
 - SDL2 dev headers (viewer only)
   - Ubuntu/Debian: sudo apt-get install libsdl2-dev
   - macOS (Homebrew): brew install sdl2
-- PThreads (usually part of libc on Linux/macOS)
 
 ## Building
 
 Using the provided Makefile (recommended):
 make
 
-If you also use the parallel solver, build it with a one-liner:
-gcc -O2 -std=c11 -Wall -Wextra -Wpedantic nbody_parallel.c -lpthread -lm -o nbody_parallel
-
 One-liner without Makefile (Linux/macOS):
 gcc -O2 -std=c11 -Wall -Wextra -Wpedantic nbody_seq.c viewer.c -lm $(sdl2-config --cflags --libs) -o nbody_seq
 
 ## Running
 
-Sequential + Viewer:
+Sequential:
 ./nbody_seq <number_of_particles> <timesteps>
 
 Notes:
@@ -50,9 +45,8 @@ Examples:
 ./nbody_seq 200 0
 ./nbody_seq 1500 100000
 
-Parallel (headless):
+Parallel (not implemented yet):
 ./nbody_parallel <number_of_particles> <timesteps> <threads>
-Headless: prints timing/results to stdout for benchmarking without any rendering cost.
 
 ## Controls (Viewer)
 - W / S: forward / backward
@@ -71,7 +65,7 @@ Integrator: semi-implicit (symplectic) Euler
 - v(t+dt) = v(t) + a(t) * dt
 - x(t+dt) = x(t) + v(t+dt) * dt
 
-Forces are computed pairwise with Newton’s 3rd law (upper triangle only) to avoid double-counting.
+Forces are computed pairwise with Newton’s 3rd law to avoid double-counting.
 
 ## Tuning and Defaults
 - G (in nbody.h): gravitational constant (default 1.0)
@@ -86,18 +80,6 @@ Viewer sprite sizing:
 Stability tips:
 - If close encounters explode, reduce DT or increase SUBSTEPS, and/or increase EPS2.
 - For prettier demos, add small random transverse velocities in init_bodies.
-
-## Benchmarking
-To measure algorithmic speed (not rendering):
-- Prefer the parallel, headless run:
-  ./nbody_parallel N STEPS THREADS
-- Or add a headless flag to the sequential build to time only compute_forces / update_bodies.
-
-## Example Test Scenes
-- Line of equal masses collapsing to center (current default init)
-- Two clusters on a collision course
-- Single massive "sun" with orbiting bodies
-- Uniform random sphere with small tangential velocities
 
 ## License
 MIT
