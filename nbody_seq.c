@@ -110,13 +110,14 @@ int main(int argc, char **argv)
     }
 
     init_bodies(bodies, n);
+    int dt = 1e-3; // time step in seconds
     for (size_t step = 0; step < steps; ++step)
     {
         compute_forces(bodies, n);
-        update_bodies(bodies, n, 1.0); /* dt = 1.0 as placeholder */
+        update_bodies(bodies, n, dt);
     }
 
-    printf("Sequential simulation placeholder complete.\n");
+    printf("Sequential simulation complete.\n");
     free(bodies);
     return EXIT_SUCCESS;
 }
