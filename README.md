@@ -27,26 +27,26 @@ Includes a sequential solver. The sequential build has an SDL2 viewer for real-t
 ## Building
 
 Using the provided Makefile (recommended):
-make
+- make
 
 One-liner without Makefile (Linux/macOS):
-gcc -O2 -std=c11 -Wall -Wextra -Wpedantic nbody_seq.c viewer.c -lm $(sdl2-config --cflags --libs) -o nbody_seq
+- gcc -O2 -std=c11 -Wall -Wextra -Wpedantic nbody_seq.c viewer.c -lm $(sdl2-config --cflags --libs) -o nbody_seq
 
 ## Running
 
 Sequential:
-./nbody_seq <number_of_particles> <timesteps>
+- ./nbody_seq <number_of_particles> <timesteps>
 
 Notes:
 - timesteps = 0 → run until window close
 - Otherwise, the viewer advances physics until exactly <timesteps> substeps have been simulated (bundled as SUBSTEPS per frame), then exits.
 
 Examples:
-./nbody_seq 200 0
-./nbody_seq 1500 100000
+- ./nbody_seq 200 0
+- ./nbody_seq 1500 100000
 
 Parallel (not implemented yet):
-./nbody_parallel <number_of_particles> <timesteps> <threads>
+- ./nbody_parallel <number_of_particles> <timesteps> <threads>
 
 ## Controls (Viewer)
 - W / S: forward / backward
