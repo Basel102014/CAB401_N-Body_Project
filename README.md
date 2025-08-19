@@ -10,7 +10,7 @@ The simulation models gravitational interactions among particles in 3D space.
 - Parallelism using **PThreads** and shared memory  
 - Multiple test cases (e.g., galaxy cluster, uniform distributions)  
 - Benchmarking and performance measurement tools  
-- Optional visualization support
+- Optional visualisation support
 
 ## Getting Started
 
