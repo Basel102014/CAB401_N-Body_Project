@@ -56,8 +56,8 @@ void compute_forces(Body *bodies, size_t n)
             bodies[j].fz -= fz;
         }
     }
-    printf("Computed forces for %zu bodies.\n", n);
-    fflush(stdout);
+    // printf("Computed forces for %zu bodies.\n", n);
+    // fflush(stdout);
 }
 
 void update_bodies(Body *bodies, size_t n, double dt)
@@ -88,8 +88,8 @@ void update_bodies(Body *bodies, size_t n, double dt)
     {
         bodies[i].fx = bodies[i].fy = bodies[i].fz = 0.0;
     }
-    printf("Updated positions and velocities for %zu bodies.\n", n);
-    fflush(stdout);
+    // printf("Updated positions and velocities for %zu bodies.\n", n);
+    // fflush(stdout);
 }
 
 int main(int argc, char **argv)
