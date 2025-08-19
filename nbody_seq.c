@@ -21,44 +21,41 @@ void init_bodies(Body *bodies, size_t n) {
 }
 
 void compute_forces(Body *bodies, size_t n) {
-    // reset force accumulators
+    // 1) Zero force accumulators
     for (size_t i = 0; i < n; ++i) {
         bodies[i].fx = 0.0;
         bodies[i].fy = 0.0;
         bodies[i].fz = 0.0;
     }
 
-    // pairwise forces with Newton's 3rd law
+    // 2) Pairwise interactions (upper triangle), apply equal & opposite forces
     for (size_t i = 0; i < n; ++i) {
+        const double mix = bodies[i].mass;
+        const double xi  = bodies[i].x, yi = bodies[i].y, zi = bodies[i].z;
+
         for (size_t j = i + 1; j < n; ++j) {
-            double dx = bodies[j].x - bodies[i].x;
-            double dy = bodies[j].y - bodies[i].y;
-            double dz = bodies[j].z - bodies[i].z;
+            const double dx = bodies[j].x - xi;
+            const double dy = bodies[j].y - yi;
+            const double dz = bodies[j].z - zi;
 
-            // softened distance squared
-            double r2 = dx*dx + dy*dy + dz*dz + EPS2;
+            // Softened distance^2 (avoids singularities / huge forces)
+            const double r2   = dx*dx + dy*dy + dz*dz + EPS2;
+            const double invr = 1.0 / sqrt(r2);
+            const double invr3 = invr * invr * invr;
 
-            // inverse r and inverse r^3
-            double inv_r  = 1.0 / sqrt(r2);
-            double inv_r3 = inv_r * inv_r * inv_r;
+            // Scalar for vector force: G * m_i * m_j / r^3
+            const double s = G * mix * bodies[j].mass * invr3;
 
-            // scalar magnitude for the vector force
-            double s = G * bodies[i].mass * bodies[j].mass * inv_r3;
+            const double fx = s * dx;
+            const double fy = s * dy;
+            const double fz = s * dz;
 
-            double fx = s * dx;
-            double fy = s * dy;
-            double fz = s * dz;
-
-            // apply +F to i and -F to j
-            bodies[i].fx += fx;
-            bodies[i].fy += fy;
-            bodies[i].fz += fz;
-
-            bodies[j].fx -= fx;
-            bodies[j].fy -= fy;
-            bodies[j].fz -= fz;
+            bodies[i].fx +=  fx; bodies[i].fy +=  fy; bodies[i].fz +=  fz;
+            bodies[j].fx -=  fx; bodies[j].fy -=  fy; bodies[j].fz -=  fz;
         }
     }
+    printf("Computed forces for %zu bodies.\n", n);
+    fflush(stdout);
 }
 
 
