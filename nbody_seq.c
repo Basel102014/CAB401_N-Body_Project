@@ -15,8 +15,8 @@
 #define RMIN_PX 2
 #define RMAX_PX 12
 
-// distance-to-size curve: at Z_SHRINK_HALF, size ~ 1/2 of base
-#define Z_SHRINK_HALF 80.0
+// distance-to-size curve: at zcam == Z_REF, scale = 1.0
+#define Z_REF 20.0
 // ------------------------
 
 // Simple camera
@@ -219,8 +219,23 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // Camera set so you can see the initial line
-    Camera cam = {.x = 0.0, .y = 2.0, .z = 15.0, .yaw = 0.0, .pitch = -0.15, .fov_deg = 60.0};
+    double yaw = -45.0 * (M_PI/180.0);
+    double pitch = -30.0 * (M_PI/180.0);
+    double R = 20.0;  // distance from origin
+
+    double fx =  cos(pitch) * cos(yaw);
+    double fy =  sin(pitch);
+    double fz = -cos(pitch) * sin(yaw);
+
+    Camera cam = {
+        .x = -R*fx,
+        .y = -R*fy,
+        .z = -R*fz,
+        .yaw = yaw,
+        .pitch = pitch,
+        .fov_deg = 60.0
+    };
+
 
     // Projection constants
     const double nearz = 0.1;
@@ -373,8 +388,8 @@ int main(int argc, char **argv)
 
             // depth size: never bigger than base, shrinks with distance
             int base_rad = mass_to_radius_px(bodies[i].mass, mmin, mmax);
-            double depth_scale = 1.0 / (1.0 + (sprites[k].zcam / Z_SHRINK_HALF));
-            depth_scale = clampd(depth_scale, 0.25, 1.00); // 25%..100%
+            double depth_scale = Z_REF / sprites[k].zcam;
+            depth_scale = clampd(depth_scale, 0.25, 10.00);
             int rad = (int)lround(base_rad * depth_scale);
             if (rad < 1)
                 rad = 1;
