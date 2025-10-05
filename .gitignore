@@ -1,0 +1,39 @@
+# Compiled object files
+*.o
+*.obj
+
+# Executable binaries
+*.out
+*.exe
+*.bin
+a.out
+nbody
+viewer
+
+# Static and dynamic libraries
+*.so
+*.a
+*.dll
+*.lib
+*.dylib
+
+# Build directories
+/build/
+bin/
+obj/
+
+# Temporary or cache files
+*.log
+*.tmp
+*.swp
+*.DS_Store
+
+# Generated snapshots or data files
+*.dat
+*.csv
+*.txt
+
+# SDL / Viewer cache
+*.bmp
+*.png
+*.ppm

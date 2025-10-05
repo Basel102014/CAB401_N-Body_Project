@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define G     1.0   // Gravitational constant      
+#define G     1e-3   // Gravitational constant      
 #define EPS2  1e-2  // Softening factor to avoid singularities    
 #define DT    1e-3  // physics dt per substep
 #define M_PI 3.14159265358979323846 // Pi constant
