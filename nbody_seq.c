@@ -4,26 +4,50 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
 #include "nbody.h"
 #include "viewer.h"
 
 typedef struct { double fx, fy, fz; } Force;
 
+/* Return monotonic seconds (high precision) */
+static inline double now_sec(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
 /* Initialise all bodies */
+#include <time.h>  // for time()
+
 void init_bodies(Body *bodies, size_t n)
 {
+    srand((unsigned)time(NULL)); // seed random generator
+
+    const double range = 15.0;     //  cube
+    const double half = range / 2; // half width for centering
+
     for (size_t i = 0; i < n; ++i)
     {
-        bodies[i].mass = 1.0;
-        bodies[i].x = (double)i - (double)(n - 1) * 0.5;
-        bodies[i].y = 0.0;
-        bodies[i].z = 0.0;
-        bodies[i].vx = bodies[i].vy = bodies[i].vz = 0.0;
+        bodies[i].mass = ((double)rand() / RAND_MAX) * 299999.0 + 1.0; // [1.0, 300000.0]
+
+        // Random positions in [-7.5, +7.5]
+        bodies[i].x = ((double)rand() / RAND_MAX) * range - half;
+        bodies[i].y = ((double)rand() / RAND_MAX) * range - half;
+        bodies[i].z = ((double)rand() / RAND_MAX) * range - half;
+
+        // Random small initial velocities
+        bodies[i].vx = 0.0; 
+        bodies[i].vy = 0.0;  
+        bodies[i].vz = 0.0;  
+
+        // Clear forces
         bodies[i].fx = bodies[i].fy = bodies[i].fz = 0.0;
     }
 }
 
-/* Compute gravitational forces for a given body index range */
+/* Compute gravitational forces for [start,end) */
 static void compute_forces_range(const Body *bodies, size_t n, size_t start, size_t end, Force *acc)
 {
     for (size_t i = start; i < end; ++i)
@@ -51,9 +75,11 @@ static void compute_forces_range(const Body *bodies, size_t n, size_t start, siz
     }
 }
 
-/* Sequential wrapper that uses one scratch buffer */
-void compute_forces(Body *bodies, size_t n)
+/* Sequential wrapper (timed) */
+double compute_forces(Body *bodies, size_t n)
 {
+    double t0 = now_sec();
+
     Force *scratch = malloc(n * sizeof(Force));
     if (!scratch) { perror("malloc"); exit(EXIT_FAILURE); }
     memset(scratch, 0, n * sizeof(Force));
@@ -66,7 +92,10 @@ void compute_forces(Body *bodies, size_t n)
         bodies[i].fy = scratch[i].fy;
         bodies[i].fz = scratch[i].fz;
     }
+
     free(scratch);
+
+    return now_sec() - t0;  // elapsed seconds for this force computation
 }
 
 /* Integrate positions and velocities using leapfrog */
@@ -98,32 +127,27 @@ void update_bodies(Body *bodies, size_t n, double dt)
     }
 }
 
-/* Run one full timestep */
-static inline void sim_step(Body *b, size_t n, double dt)
+/* Run one full timestep (timed) */
+double sim_step(Body *b, size_t n, double dt, double *compute_time)
 {
-    compute_forces(b, n);
+    double t0 = now_sec();
+    *compute_time = compute_forces(b, n);
     update_bodies(b, n, dt);
-}
-
-/* Get seconds since CLOCK_MONOTONIC */
-static inline double now_sec(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+    return now_sec() - t0;
 }
 
 int main(int argc, char **argv)
 {
     if (argc < 3)
     {
-        fprintf(stderr, "Usage: %s number_of_particles timesteps [stride]\n", argv[0]);
+        fprintf(stderr, "Usage: %s number_of_particles timesteps [stride] [--csv]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     const size_t n = strtoull(argv[1], NULL, 10);
     const size_t steps = strtoull(argv[2], NULL, 10);
-    const size_t stride = (argc >= 4) ? strtoull(argv[3], NULL, 10) : 10;
+    const size_t stride = (argc >= 4 && argv[3][0] != '-') ? strtoull(argv[3], NULL, 10) : 10;
+    bool save_csv = (argc > 3 && strcmp(argv[argc - 1], "--csv") == 0);
     const double dt = 1e-3;
 
     Body *bodies = calloc(n, sizeof(Body));
@@ -138,13 +162,33 @@ int main(int argc, char **argv)
     if (!masses) { perror("malloc"); free(snaps.xyz); free(bodies); return EXIT_FAILURE; }
     for (size_t i = 0; i < n; ++i) masses[i] = bodies[i].mass;
 
-    /* --- Timing start --- */
-    double start_time = now_sec();
+    double total_sim_time = 0.0, total_force_time = 0.0;
+    double min_sim = 1e9, max_sim = 0.0;
+    double min_force = 1e9, max_force = 0.0;
+
+    FILE *fp = NULL;
+    if (save_csv)
+    {
+        fp = fopen("timing_results.csv", "w");
+        if (!fp) { perror("fopen csv"); save_csv = false; }
+        else fprintf(fp, "step,sim_time,force_time\n");
+    }
 
     size_t f = 0;
     for (size_t s = 0; s < steps; ++s)
     {
-        sim_step(bodies, n, dt);
+        double compute_t = 0.0;
+        double sim_t = sim_step(bodies, n, dt, &compute_t);
+
+        total_sim_time += sim_t;
+        total_force_time += compute_t;
+        if (sim_t < min_sim) min_sim = sim_t;
+        if (sim_t > max_sim) max_sim = sim_t;
+        if (compute_t < min_force) min_force = compute_t;
+        if (compute_t > max_force) max_force = compute_t;
+
+        if (save_csv && fp)
+            fprintf(fp, "%zu,%.9f,%.9f\n", s, sim_t, compute_t);
 
         if ((s % stride) == 0)
         {
@@ -159,11 +203,18 @@ int main(int argc, char **argv)
         }
     }
 
-    /* --- Timing end --- */
-    double elapsed = now_sec() - start_time;
-    printf("\n--- Simulation Complete ---\n");
-    printf("Bodies: %zu\nSteps: %zu\nTime: %.4f seconds\n", n, steps, elapsed);
-    printf("Average time per step: %.6f s\n", elapsed / (double)steps);
+    if (fp) fclose(fp);
+
+    printf("\n--- Timing Results ---\n");
+    printf("Bodies: %zu\nSteps: %zu\n", n, steps);
+    printf("Average sim step time : %.8f s\n", total_sim_time / steps);
+    printf("Average force time    : %.8f s\n", total_force_time / steps);
+    printf("Min / Max sim step    : %.8f / %.8f s\n", min_sim, max_sim);
+    printf("Min / Max force time  : %.8f / %.8f s\n", min_force, max_force);
+    printf("Total sim time        : %.8f s\n", total_sim_time);
+
+    if (save_csv)
+        printf("Per-step timing saved to timing_results.csv\n");
 
     viewer_play(&snaps, masses);
 

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define G     1e-3   // Gravitational constant      
+#define G     1e-3  // Gravitational constant      
 #define EPS2  1e-2  // Softening factor to avoid singularities    
 #define DT    1e-3  // physics dt per substep
 #define M_PI 3.14159265358979323846 // Pi constant
@@ -19,7 +19,7 @@ typedef struct {
 void init_bodies(Body *bodies, size_t n);
 
 /* Compute forces between bodies */
-void compute_forces(Body *bodies, size_t n);
+double compute_forces(Body *bodies, size_t n);
 
 /* Update positions/velocities based on forces */
 void update_bodies(Body *bodies, size_t n, double dt);
