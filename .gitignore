@@ -37,3 +37,5 @@ obj/
 *.bmp
 *.png
 *.ppm
+
+nbody_seq
