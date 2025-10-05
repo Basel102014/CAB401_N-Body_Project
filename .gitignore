@@ -39,3 +39,5 @@ obj/
 *.ppm
 
 nbody_seq
+.vscode/*
+!vscode/.gitkeep

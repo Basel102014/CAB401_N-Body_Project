@@ -1,7 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 #include "nbody.h"
 #include "viewer.h"
 
@@ -103,6 +105,14 @@ static inline void sim_step(Body *b, size_t n, double dt)
     update_bodies(b, n, dt);
 }
 
+/* Get seconds since CLOCK_MONOTONIC */
+static inline double now_sec(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3)
@@ -128,6 +138,9 @@ int main(int argc, char **argv)
     if (!masses) { perror("malloc"); free(snaps.xyz); free(bodies); return EXIT_FAILURE; }
     for (size_t i = 0; i < n; ++i) masses[i] = bodies[i].mass;
 
+    /* --- Timing start --- */
+    double start_time = now_sec();
+
     size_t f = 0;
     for (size_t s = 0; s < steps; ++s)
     {
@@ -145,6 +158,12 @@ int main(int argc, char **argv)
             ++f;
         }
     }
+
+    /* --- Timing end --- */
+    double elapsed = now_sec() - start_time;
+    printf("\n--- Simulation Complete ---\n");
+    printf("Bodies: %zu\nSteps: %zu\nTime: %.4f seconds\n", n, steps, elapsed);
+    printf("Average time per step: %.6f s\n", elapsed / (double)steps);
 
     viewer_play(&snaps, masses);
 
