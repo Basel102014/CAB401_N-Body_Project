@@ -25,14 +25,14 @@ void init_bodies(Body *bodies, size_t n)
 {
     srand((unsigned)time(NULL)); // seed random generator
 
-    const double range = 15.0;     //  cube
+    const double range = 10.0;     //  cube
     const double half = range / 2; // half width for centering
 
     for (size_t i = 0; i < n; ++i)
     {
-        bodies[i].mass = ((double)rand() / RAND_MAX) * 299999.0 + 1.0; // [1.0, 300000.0]
+        bodies[i].mass = 1.0;
 
-        // Random positions in [-7.5, +7.5]
+        // Random positions in [-5.0, +5.0]
         bodies[i].x = ((double)rand() / RAND_MAX) * range - half;
         bodies[i].y = ((double)rand() / RAND_MAX) * range - half;
         bodies[i].z = ((double)rand() / RAND_MAX) * range - half;
