@@ -15,13 +15,16 @@ typedef struct {
     double fx, fy, fz;
 } Body;
 
+/* Type for a user-defined setup callback */
+typedef void (*BodySetupFn)(Body *bodies, size_t n);
+
 /* Initialize bodies with values */
-void init_bodies(Body *bodies, size_t n);
+void init_bodies(Body *bodies, size_t n, BodySetupFn custom_init);
 
 /* Compute forces between bodies */
 double compute_forces(Body *bodies, size_t n);
 
 /* Update positions/velocities based on forces */
-void update_bodies(Body *bodies, size_t n, double dt);
+double update_bodies(Body *bodies, size_t n, double dt);
 
 #endif /* NBODY_H */
