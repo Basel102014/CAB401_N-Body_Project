@@ -1,4 +1,4 @@
-# Makefile (no leftover .o files)
+# ===== Makefile (no leftover .o files) =====
 
 CC       = gcc
 WARN     = -Wall -Wextra -Wpedantic
@@ -10,17 +10,22 @@ CFLAGS   = $(WARN) $(CSTD) $(OPT)
 SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null || pkg-config --cflags sdl2 2>/dev/null)
 SDL_LIBS   := $(shell sdl2-config --libs   2>/dev/null || pkg-config --libs   sdl2 2>/dev/null)
 
-LDLIBS   = -lm
+LDLIBS = -lm
+TARGET = nbody_seq
 
-TARGETS = nbody_seq
+# ---- Source files ----
+SRC = nbody_seq.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
+HEADERS = nbody.h nbody_tests.h cli_helpers.h test_presets.h viewer.h
 
-all: $(TARGETS)
+# ---- Default target ----
+all: $(TARGET)
 
-# Build in a single command — no intermediate .o files are produced
-nbody_seq: nbody_seq.c viewer.c nbody.h viewer.h
-	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ nbody_seq.c viewer.c $(SDL_LIBS) $(LDLIBS)
+# ---- Build main executable ----
+$(TARGET): $(SRC) $(HEADERS)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(SRC) $(SDL_LIBS) $(LDLIBS)
 
+# ---- Clean up build outputs ----
 clean:
-	rm -f $(TARGETS)
+	rm -f $(TARGET)
 
 .PHONY: all clean

@@ -3,47 +3,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL2/SDL.h>
-#include "nbody.h" // Body, compute_forces, update_bodies
+#include "nbody.h"
 #include "viewer.h"
 
-// ------ Tweakables ------
+// --- Window and simulation settings ---
 #define WIN_W 960
 #define WIN_H 600
-#define SUBSTEPS 8 // physics substeps per frame
-#define DT 1e-3    // physics dt per substep
+#define SUBSTEPS 8
+#define DT 1e-3
 
-// mass -> pixel size
+// --- Rendering constants ---
 #define RMIN_PX 2
 #define RMAX_PX 12
-
-// distance-to-size curve: at zcam == Z_REF, scale = 1.0
 #define Z_REF 20.0
-// ------------------------
 
-// Simple camera
+// --- Camera struct (position + orientation) ---
 typedef struct
 {
-    double x, y, z; // position
-    double yaw;     // rotate around Y (left/right)
-    double pitch;   // rotate around X (up/down)
-    double fov_deg; // vertical field of view (degrees)
+    double x, y, z; // Position in 3D space
+    double yaw;     // Horizontal rotation
+    double pitch;   // Vertical rotation
+    double fov_deg; // Field of view in degrees
 } Camera;
 
-// Sprite for sorting by depth
+// --- Sprite struct for depth sorting ---
 typedef struct
 {
-    double zcam; // depth in camera space (forward)
-    int sx, sy;  // screen position
-    size_t i;    // index of body
+    double zcam; // Depth from camera
+    int sx, sy;  // Screen position
+    size_t i;    // Body index
 } Sprite;
 
-// --- Utilities ---
+// Clamp a value between two bounds
 static inline double clampd(double v, double a, double b)
 {
     return v < a ? a : (v > b ? b : v);
 }
 
-// draw a filled circle
+// Draw a filled circle (used for bodies)
 static void draw_filled_circle(SDL_Renderer *ren, int cx, int cy, int r)
 {
     if (r <= 0)
@@ -55,7 +52,7 @@ static void draw_filled_circle(SDL_Renderer *ren, int cx, int cy, int r)
     }
 }
 
-// map mass -> pixel radius using cube-root (constant-density look)
+// Convert mass to on-screen radius (keeps visual scaling consistent)
 static int mass_to_radius_px(double m, double mmin, double mmax)
 {
     double a = cbrt(fmax(0.0, m));
@@ -66,32 +63,28 @@ static int mass_to_radius_px(double m, double mmin, double mmax)
     return (int)lround(clampd(r, RMIN_PX, RMAX_PX));
 }
 
-// project a world point to screen using the camera (perspective)
-// Returns false if behind camera or outside near/far
-static bool project_point(const Camera *cam, double fx, double fy,
-                          double nearz, double farz,
-                          double wx, double wy, double wz,
-                          int *out_sx, int *out_sy, double *zcam_out)
+// Project 3D world coordinates to 2D screen space
+static bool project_point(
+    const Camera *cam, double fx, double fy,
+    double nearz, double farz,
+    double wx, double wy, double wz,
+    int *out_sx, int *out_sy, double *zcam_out)
 {
-    // Translate to camera
     double px = wx - cam->x;
     double py = wy - cam->y;
     double pz = wz - cam->z;
 
-    // Yaw (around Y)
     double c_yaw = cos(cam->yaw), s_yaw = sin(cam->yaw);
     double x1 = c_yaw * px + s_yaw * pz;
     double z1 = -s_yaw * px + c_yaw * pz;
 
-    // Pitch (around X)
     double c_pitch = cos(cam->pitch), s_pitch = sin(cam->pitch);
     double y2 = c_pitch * py - s_pitch * z1;
     double z2 = s_pitch * py + c_pitch * z1;
 
     if (z2 <= nearz || z2 > farz)
-        return false; // cull behind/too far
+        return false;
 
-    // Perspective divide
     int cx = WIN_W / 2, cy = WIN_H / 2;
     *out_sx = (int)lround(cx + (x1 * fx) / z2);
     *out_sy = (int)lround(cy - (y2 * fy) / z2);
@@ -100,14 +93,15 @@ static bool project_point(const Camera *cam, double fx, double fy,
     return true;
 }
 
-// depth sort: draw far -> near
+// Compare sprites by depth (for rendering back-to-front)
 static int cmp_sprite_desc(const void *a, const void *b)
 {
     double za = ((const Sprite *)a)->zcam;
     double zb = ((const Sprite *)b)->zcam;
-    return (zb > za) - (zb < za); // descending by z (far first)
+    return (zb > za) - (zb < za);
 }
 
+// --- Main viewer function ---
 void viewer_play(const Snapshots *snaps, const double *masses)
 {
     if (!snaps || !snaps->xyz || snaps->n == 0 || snaps->frames == 0)
@@ -115,7 +109,7 @@ void viewer_play(const Snapshots *snaps, const double *masses)
 
     const size_t n = snaps->n;
 
-    // mass range for sprite sizing
+    // Determine min/max mass for visual scaling
     double mmin = masses ? masses[0] : 1.0, mmax = mmin;
     if (masses)
     {
@@ -133,14 +127,19 @@ void viewer_play(const Snapshots *snaps, const double *masses)
         fprintf(stderr, "SDL_Init error: %s\n", SDL_GetError());
         return;
     }
-    SDL_Window *win = SDL_CreateWindow("N-Body 3D (Playback)",
-                                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H, SDL_WINDOW_SHOWN);
+
+    SDL_Window *win = SDL_CreateWindow(
+        "N-Body 3D (Playback)",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        WIN_W, WIN_H, SDL_WINDOW_SHOWN);
+
     if (!win)
     {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         SDL_Quit();
         return;
     }
+
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1,
                                            SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!ren)
@@ -151,10 +150,9 @@ void viewer_play(const Snapshots *snaps, const double *masses)
         return;
     }
 
-    // enable alpha blending for fading trails
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
 
-    // default camera (looking at origin, ~-30°)
+    // Default camera setup
     double yaw = -45.0 * (M_PI / 180.0), pitch = -30.0 * (M_PI / 180.0), R = 20.0;
     double fx0 = cos(pitch) * cos(yaw);
     double fy0 = sin(pitch);
@@ -162,7 +160,6 @@ void viewer_play(const Snapshots *snaps, const double *masses)
     Camera cam = {.x = -R * fx0, .y = -R * fy0, .z = -R * fz0, .yaw = yaw, .pitch = pitch, .fov_deg = 60.0};
 
     const double nearz = 0.1, farz = 1000.0;
-
     Sprite *sprites = malloc(n * sizeof(Sprite));
     if (!sprites)
     {
@@ -176,14 +173,13 @@ void viewer_play(const Snapshots *snaps, const double *masses)
     size_t frame = 0;
     bool paused = false, running = true;
 
-    // ---- trail controls ----
-    // How many previous frames to draw (cap by snaps->frames at runtime)
-    const int TRAIL_FRAMES_MAX = 200; // ~3–4 seconds at 60 FPS; tune as you like
-    const int TRAIL_STEP = 1;         // sample every frame; raise to thin out
+    const int TRAIL_FRAMES_MAX = 200;
+    const int TRAIL_STEP = 1;
 
+    // --- Main loop ---
     while (running)
     {
-        // ---- handle events (pan with arrows) ----
+        // Handle input
         SDL_Event ev;
         while (SDL_PollEvent(&ev))
         {
@@ -200,34 +196,27 @@ void viewer_play(const Snapshots *snaps, const double *masses)
                     paused = !paused;
                     break;
                 case SDLK_r:
-                    cam.x = 0.0;
-                    cam.y = 0.0;
-                    cam.z = 0.0;
-                    cam.yaw = 0.0;
-                    cam.pitch = 0.0;
+                    cam.x = cam.y = cam.z = 0;
+                    cam.yaw = cam.pitch = 0;
                     break;
-
-                // Arrow keys: non-inverted “feel”
                 case SDLK_RIGHT:
                     cam.yaw += 0.05;
-                    break; // turn right
+                    break;
                 case SDLK_LEFT:
                     cam.yaw -= 0.05;
-                    break; // turn left
+                    break;
                 case SDLK_UP:
                     cam.pitch -= 0.04;
-                    break; // look up (negative pitch = up)
+                    break;
                 case SDLK_DOWN:
                     cam.pitch += 0.04;
-                    break; // look down
+                    break;
                 }
-                // Clamp pitch to avoid gimbal flip
                 const double half_pi = M_PI * 0.5 - 1e-4;
                 if (cam.pitch > half_pi)
                     cam.pitch = half_pi;
                 if (cam.pitch < -half_pi)
                     cam.pitch = -half_pi;
-                // (Optional) wrap yaw so it doesn't grow unbounded
                 if (cam.yaw > M_PI)
                     cam.yaw -= 2.0 * M_PI;
                 if (cam.yaw < -M_PI)
@@ -235,24 +224,19 @@ void viewer_play(const Snapshots *snaps, const double *masses)
             }
         }
 
-        // ---- camera-relative movement (WASD) ----
+        // Camera movement (WASD + Q/E)
         const Uint8 *keys = SDL_GetKeyboardState(NULL);
         double move_speed = 0.3;
 
-        // Camera basis vectors
         double cosPitch = cos(cam.pitch), sinPitch = sin(cam.pitch);
         double cosYaw = cos(cam.yaw), sinYaw = sin(cam.yaw);
 
-        // Forward points toward -Z when yaw=pitch=0
         double fx = sinYaw * cosPitch;
         double fy = sinPitch;
         double fz = -cosYaw * cosPitch;
-
-        // Right is horizontal (X/Z plane), perpendicular to forward
         double rx = cosYaw;
         double rz = sinYaw;
 
-        // World up for Q/E (clean vertical rise, no diagonal when pitched)
         if (keys[SDL_SCANCODE_S])
         {
             cam.x += fx * move_speed;
@@ -275,17 +259,16 @@ void viewer_play(const Snapshots *snaps, const double *masses)
             cam.x += rx * move_speed;
             cam.z += rz * move_speed;
         }
-
         if (keys[SDL_SCANCODE_E])
-            cam.y += move_speed; // up (world Y)
+            cam.y += move_speed;
         if (keys[SDL_SCANCODE_Q])
-            cam.y -= move_speed; // down (world Y)
+            cam.y -= move_speed;
 
         if (!paused)
         {
             frame++;
             if (frame >= snaps->frames)
-                frame = snaps->frames - 1; // or loop: frame=0
+                frame = snaps->frames - 1;
         }
 
         SDL_SetRenderDrawColor(ren, 10, 12, 16, 255);
@@ -295,70 +278,50 @@ void viewer_play(const Snapshots *snaps, const double *masses)
         double fy_proj = 0.5 * WIN_H / tan(0.5 * fov_rad);
         double fx_proj = fy_proj * ((double)WIN_W / (double)WIN_H);
 
-        // ------- draw trails first (behind the bodies) -------
-        // For each body, draw a polyline of the last K positions with fading alpha.
+        // Draw trails (fading path lines)
         int trail_frames = TRAIL_FRAMES_MAX;
         if (trail_frames > (int)frame)
             trail_frames = (int)frame;
-
         if (trail_frames > 1)
         {
             for (size_t i = 0; i < n; ++i)
             {
-                // we'll connect successive projected points if both are visible
                 int prev_sx = 0, prev_sy = 0;
                 bool has_prev = false;
-
-                // fade oldest -> newest: low alpha -> high alpha
                 for (int t = trail_frames; t > 0; t -= TRAIL_STEP)
                 {
                     size_t fidx = frame - t;
                     const float *src = snaps->xyz + fidx * n * 3;
-
-                    double wx = (double)src[i * 3 + 0];
-                    double wy = (double)src[i * 3 + 1];
-                    double wz = (double)src[i * 3 + 2];
-
+                    double wx = src[i * 3 + 0], wy = src[i * 3 + 1], wz = src[i * 3 + 2];
                     int sx, sy;
                     double zcam;
                     if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam))
                     {
                         if (sx >= -100 && sx <= WIN_W + 100 && sy >= -100 && sy <= WIN_H + 100)
                         {
-                            // alpha: newer segments brighter
-                            // map t in (trail_frames..0] to alpha in [30..180]
                             Uint8 alpha = (Uint8)(30 + (trail_frames - t) * (150.0 / fmax(1, trail_frames)));
                             SDL_SetRenderDrawColor(ren, 200, 200, 220, alpha);
-
                             if (has_prev)
-                            {
                                 SDL_RenderDrawLine(ren, prev_sx, prev_sy, sx, sy);
-                            }
                             prev_sx = sx;
                             prev_sy = sy;
                             has_prev = true;
                         }
                         else
-                        {
-                            has_prev = false; // break the line if off-screen
-                        }
+                            has_prev = false;
                     }
                     else
-                    {
                         has_prev = false;
-                    }
                 }
             }
         }
 
-        // ------- project visible sprites for this frame -------
+        // Project and sort visible bodies
         const float *src_now = snaps->xyz + frame * n * 3;
         size_t vis = 0;
         for (size_t i = 0; i < n; ++i)
         {
-            double wx = (double)src_now[i * 3 + 0];
-            double wy = (double)src_now[i * 3 + 1];
-            double wz = (double)src_now[i * 3 + 2];
+            double wx = src_now[i * 3 + 0], wy = src_now[i * 3 + 1], wz = src_now[i * 3 + 2];
             int sx, sy;
             double zcam;
             if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam))
@@ -372,30 +335,26 @@ void viewer_play(const Snapshots *snaps, const double *masses)
                 ++vis;
             }
         }
-
         qsort(sprites, vis, sizeof(Sprite), cmp_sprite_desc);
 
-        // ------- draw bodies on top -------
+        // Draw bodies (closest last)
         for (size_t k = 0; k < vis; ++k)
         {
             size_t i = sprites[k].i;
             int sx = sprites[k].sx, sy = sprites[k].sy;
-
             double t = clampd((sprites[k].zcam - 5.0) / 200.0, 0.0, 1.0);
             Uint8 shade = (Uint8)lround(255.0 * (1.0 - 0.25 * t));
             SDL_SetRenderDrawColor(ren, shade, shade, shade, 255);
-
             int base_rad = mass_to_radius_px(masses ? masses[i] : 1.0, mmin, mmax);
             double depth_scale = Z_REF / sprites[k].zcam;
             depth_scale = clampd(depth_scale, 0.25, 10.0);
             int rad = (int)lround(base_rad * depth_scale);
             if (rad < 1)
                 rad = 1;
-
             draw_filled_circle(ren, sx, sy, rad);
         }
 
-        // crosshair
+        // Crosshair
         SDL_SetRenderDrawColor(ren, 40, 40, 50, 150);
         SDL_RenderDrawLine(ren, 0, WIN_H / 2, WIN_W, WIN_H / 2);
         SDL_RenderDrawLine(ren, WIN_W / 2, 0, WIN_W / 2, WIN_H);
