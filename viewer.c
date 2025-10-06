@@ -159,7 +159,7 @@ void viewer_play(const Snapshots *snaps, const double *masses)
     double fz0 = -cos(pitch) * sin(yaw);
     Camera cam = {.x = -R * fx0, .y = -R * fy0, .z = -R * fz0, .yaw = yaw, .pitch = pitch, .fov_deg = 60.0};
 
-    const double nearz = 0.1, farz = 1000.0;
+    const double nearz = 0.001, farz = 1000.0;
     Sprite *sprites = malloc(n * sizeof(Sprite));
     if (!sprites)
     {
@@ -271,34 +271,73 @@ void viewer_play(const Snapshots *snaps, const double *masses)
                 frame = snaps->frames - 1;
         }
 
-        SDL_SetRenderDrawColor(ren, 10, 12, 16, 255);
+                SDL_SetRenderDrawColor(ren, 10, 12, 16, 255);
         SDL_RenderClear(ren);
 
         double fov_rad = cam.fov_deg * M_PI / 180.0;
         double fy_proj = 0.5 * WIN_H / tan(0.5 * fov_rad);
         double fx_proj = fy_proj * ((double)WIN_W / (double)WIN_H);
 
-        // Draw trails (fading path lines)
+        // ======================================================
+        // 🔹 1. Perspective Grid on XZ Plane (y = 0)
+        // ======================================================
+        const double grid_extent = 100.0; // world units
+        const double grid_step   = 2.0;
+
+        for (double x = -grid_extent; x <= grid_extent; x += grid_step) {
+            int sx1, sy1, sx2, sy2;
+            double zcam;
+            if (project_point(&cam, fx_proj, fy_proj, nearz, farz, x, 0.0, -grid_extent, &sx1, &sy1, &zcam) &&
+                project_point(&cam, fx_proj, fy_proj, nearz, farz, x, 0.0,  grid_extent, &sx2, &sy2, &zcam)) {
+
+                double fade = 1.0 - fabs(x) / grid_extent;
+                Uint8 alpha = (Uint8)(40 + 60 * fade);
+                if (fabs(x) < 1e-6)
+                    SDL_SetRenderDrawColor(ren, 160, 100, 100, 180); // highlight Z-axis
+                else
+                    SDL_SetRenderDrawColor(ren, 80, 80, 100, alpha);
+                SDL_RenderDrawLine(ren, sx1, sy1, sx2, sy2);
+            }
+        }
+
+        for (double z = -grid_extent; z <= grid_extent; z += grid_step) {
+            int sx1, sy1, sx2, sy2;
+            double zcam;
+            if (project_point(&cam, fx_proj, fy_proj, nearz, farz, -grid_extent, 0.0, z, &sx1, &sy1, &zcam) &&
+                project_point(&cam, fx_proj, fy_proj, nearz, farz,  grid_extent, 0.0, z, &sx2, &sy2, &zcam)) {
+
+                double fade = 1.0 - fabs(z) / grid_extent;
+                Uint8 alpha = (Uint8)(40 + 60 * fade);
+                if (fabs(z) < 1e-6)
+                    SDL_SetRenderDrawColor(ren, 100, 160, 100, 180); // highlight X-axis
+                else
+                    SDL_SetRenderDrawColor(ren, 80, 80, 100, alpha);
+                SDL_RenderDrawLine(ren, sx1, sy1, sx2, sy2);
+            }
+        }
+
+        // ======================================================
+        // 🔹 2. Trails (fade with time)
+        // ======================================================
         int trail_frames = TRAIL_FRAMES_MAX;
-        if (trail_frames > (int)frame)
-            trail_frames = (int)frame;
-        if (trail_frames > 1)
-        {
-            for (size_t i = 0; i < n; ++i)
-            {
+        if (trail_frames > (int)frame) trail_frames = (int)frame;
+
+        if (trail_frames > 1) {
+            for (size_t i = 0; i < n; ++i) {
                 int prev_sx = 0, prev_sy = 0;
                 bool has_prev = false;
-                for (int t = trail_frames; t > 0; t -= TRAIL_STEP)
-                {
+
+                for (int t = trail_frames; t > 0; t -= TRAIL_STEP) {
                     size_t fidx = frame - t;
                     const float *src = snaps->xyz + fidx * n * 3;
-                    double wx = src[i * 3 + 0], wy = src[i * 3 + 1], wz = src[i * 3 + 2];
+                    double wx = src[i * 3 + 0];
+                    double wy = src[i * 3 + 1];
+                    double wz = src[i * 3 + 2];
+
                     int sx, sy;
                     double zcam;
-                    if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam))
-                    {
-                        if (sx >= -100 && sx <= WIN_W + 100 && sy >= -100 && sy <= WIN_H + 100)
-                        {
+                    if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam)) {
+                        if (sx >= -100 && sx <= WIN_W + 100 && sy >= -100 && sy <= WIN_H + 100) {
                             Uint8 alpha = (Uint8)(30 + (trail_frames - t) * (150.0 / fmax(1, trail_frames)));
                             SDL_SetRenderDrawColor(ren, 200, 200, 220, alpha);
                             if (has_prev)
@@ -306,26 +345,24 @@ void viewer_play(const Snapshots *snaps, const double *masses)
                             prev_sx = sx;
                             prev_sy = sy;
                             has_prev = true;
-                        }
-                        else
-                            has_prev = false;
-                    }
-                    else
-                        has_prev = false;
+                        } else has_prev = false;
+                    } else has_prev = false;
                 }
             }
         }
 
-        // Project and sort visible bodies
+        // ======================================================
+        // 🔹 3. Bodies (depth shading)
+        // ======================================================
         const float *src_now = snaps->xyz + frame * n * 3;
         size_t vis = 0;
-        for (size_t i = 0; i < n; ++i)
-        {
-            double wx = src_now[i * 3 + 0], wy = src_now[i * 3 + 1], wz = src_now[i * 3 + 2];
+        for (size_t i = 0; i < n; ++i) {
+            double wx = src_now[i * 3 + 0];
+            double wy = src_now[i * 3 + 1];
+            double wz = src_now[i * 3 + 2];
             int sx, sy;
             double zcam;
-            if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam))
-            {
+            if (project_point(&cam, fx_proj, fy_proj, nearz, farz, wx, wy, wz, &sx, &sy, &zcam)) {
                 if (sx < -100 || sx > WIN_W + 100 || sy < -100 || sy > WIN_H + 100)
                     continue;
                 sprites[vis].sx = sx;
@@ -335,26 +372,30 @@ void viewer_play(const Snapshots *snaps, const double *masses)
                 ++vis;
             }
         }
+
         qsort(sprites, vis, sizeof(Sprite), cmp_sprite_desc);
 
-        // Draw bodies (closest last)
-        for (size_t k = 0; k < vis; ++k)
-        {
+        for (size_t k = 0; k < vis; ++k) {
             size_t i = sprites[k].i;
             int sx = sprites[k].sx, sy = sprites[k].sy;
-            double t = clampd((sprites[k].zcam - 5.0) / 200.0, 0.0, 1.0);
-            Uint8 shade = (Uint8)lround(255.0 * (1.0 - 0.25 * t));
+
+            // Depth-based brightness (brighter near camera)
+            double depth_norm = clampd((sprites[k].zcam - 5.0) / 300.0, 0.0, 1.0);
+            double brightness = pow(1.0 - depth_norm, 2.0);
+            Uint8 shade = (Uint8)lround(50.0 + 205.0 * brightness);
+
             SDL_SetRenderDrawColor(ren, shade, shade, shade, 255);
+
             int base_rad = mass_to_radius_px(masses ? masses[i] : 1.0, mmin, mmax);
             double depth_scale = Z_REF / sprites[k].zcam;
             depth_scale = clampd(depth_scale, 0.25, 10.0);
             int rad = (int)lround(base_rad * depth_scale);
-            if (rad < 1)
-                rad = 1;
+            if (rad < 1) rad = 1;
+
             draw_filled_circle(ren, sx, sy, rad);
         }
 
-        // Crosshair
+        // Crosshair for orientation
         SDL_SetRenderDrawColor(ren, 40, 40, 50, 150);
         SDL_RenderDrawLine(ren, 0, WIN_H / 2, WIN_W, WIN_H / 2);
         SDL_RenderDrawLine(ren, WIN_W / 2, 0, WIN_W / 2, WIN_H);
