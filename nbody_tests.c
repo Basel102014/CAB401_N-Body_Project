@@ -79,28 +79,36 @@ void setup_binary_star(Body *b, size_t n)
         exit(EXIT_FAILURE);
     }
 
-    const double m = 1.0e30 * MASS_SCALE;
-    const double d = 4.0;
-    const double r = d / 2.0;
-    const double v = sqrt(G * m / (2.0 * r));
+    const double m1 = 1.0e30 * MASS_SCALE;
+    const double m2 = 1.0e30 * MASS_SCALE;
+    const double d = 4.0;                   // total separation distance
+    const double r1 = d * (m2 / (m1 + m2)); // distance of m1 from COM
+    const double r2 = d * (m1 / (m1 + m2)); // distance of m2 from COM
 
-    // Star A
-    b[0].mass = m;
-    b[0].x = -r;
+    // Orbital velocity magnitude (for circular orbit)
+    const double v = sqrt(G * (m1 + m2) / d);
+
+    // --- Star 1 ---
+    b[0].mass = m1;
+    b[0].x = -r1;
     b[0].y = 0.0;
     b[0].z = 0.0;
     b[0].vx = 0.0;
     b[0].vy = 0.0;
-    b[0].vz = v;
+    b[0].vz = v * (m2 / (m1 + m2));
 
-    // Star B
-    b[1].mass = m;
-    b[1].x = r;
+    // --- Star 2 ---
+    b[1].mass = m2;
+    b[1].x = r2;
     b[1].y = 0.0;
     b[1].z = 0.0;
     b[1].vx = 0.0;
     b[1].vy = 0.0;
-    b[1].vz = -v;
+    b[1].vz = -v * (m1 / (m1 + m2));
+
+    // --- Zero-out forces initially ---
+    b[0].fx = b[0].fy = b[0].fz = 0.0;
+    b[1].fx = b[1].fy = b[1].fz = 0.0;
 }
 
 /* -------------------- Trinary Star System -------------------- */
