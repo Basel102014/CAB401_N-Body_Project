@@ -81,15 +81,26 @@ void setup_binary_star(Body *b, size_t n)
 
     const double m = 1.0e30 * MASS_SCALE;
     const double d = 4.0;
-    const double v = sqrt(G * m / (d / 2.0));
+    const double r = d / 2.0;
+    const double v = sqrt(G * m / (2.0 * r));
 
+    // Star A
     b[0].mass = m;
-    b[0].x = -d / 2.0; b[0].y = 0.0; b[0].z = 0.0;
-    b[0].vx = 0.0; b[0].vy = 0.0; b[0].vz = v;
+    b[0].x = -r;
+    b[0].y = 0.0;
+    b[0].z = 0.0;
+    b[0].vx = 0.0;
+    b[0].vy = 0.0;
+    b[0].vz = v;
 
+    // Star B
     b[1].mass = m;
-    b[1].x = d / 2.0; b[1].y = 0.0; b[1].z = 0.0;
-    b[1].vx = 0.0; b[1].vy = 0.0; b[1].vz = -v;
+    b[1].x = r;
+    b[1].y = 0.0;
+    b[1].z = 0.0;
+    b[1].vx = 0.0;
+    b[1].vy = 0.0;
+    b[1].vz = -v;
 }
 
 /* -------------------- Trinary Star System -------------------- */
@@ -149,7 +160,9 @@ void setup_random_cluster(Body *b, size_t n)
         double v = sqrt(G * core_mass / (r + 1.0));
 
         b[i].mass = 1e29 * MASS_SCALE;
-        b[i].x = x; b[i].y = y; b[i].z = z;
+        b[i].x = x;
+        b[i].y = y;
+        b[i].z = z;
         b[i].vx = -v * sin(theta);
         b[i].vy = v * cos(theta);
         b[i].vz = 0.0;
