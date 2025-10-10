@@ -56,22 +56,4 @@ int run_nbody_parallel(Body *bodies,
                        double *avg_force_time,
                        double *avg_update_time);
 
-/**
- * @brief Worker thread entry function (used internally).
- * @param arg Pointer to ThreadData for this thread.
- */
-void *worker(void *arg);
-
-/**
- * @brief Compute forces for a range of bodies (thread-safe if ranges don’t overlap).
- */
-void compute_forces_range(const Body *b, size_t n,
-                          size_t start, size_t end,
-                          Force *acc);
-
-/**
- * @brief Zero-out force accumulators in a range.
- */
-void zero_acc_range(Force *acc, size_t start, size_t end);
-
 #endif /* NBODY_PARALLEL_H */

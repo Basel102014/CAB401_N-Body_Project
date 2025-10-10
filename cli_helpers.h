@@ -24,6 +24,7 @@ typedef struct {
     size_t stride;      // Frame stride for snapshot saving
     bool csv;           // Enable CSV timing output
     bool noview;        // Disable visualisation mode
+    size_t threads;     // Number of threads for parallel execution (0 = auto)
     BodySetupFn setup;  // Optional body setup function (preset)
 } Options;
 

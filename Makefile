@@ -1,5 +1,5 @@
 # ============================================================
-#  N-Body Simulation (Sequential Version)
+#  N-Body Simulation (Sequential + Parallel Unified Build)
 # ============================================================
 
 # --- Compiler and flags ---
@@ -14,43 +14,32 @@ SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null || pkg-config --cflags sd
 SDL_LIBS   := $(shell sdl2-config --libs   2>/dev/null || pkg-config --libs   sdl2 2>/dev/null)
 
 # --- Libraries ---
-LDLIBS = -lm
+LDLIBS = -lm -lpthread
 
-# --- Targets ---
-TARGET_SEQ = nbody_seq
-TARGET_PAR = nbody_par
+# --- Target ---
+TARGET = nbody_sim
 
 # --- Source files ---
-COMMON_SRC   = nbody_tests.c cli_helpers.c test_presets.c viewer.c
-SEQ_SRC      = nbody_seq.c
-PAR_SRC      = nbody_parallel.c
-HEADERS      = nbody.h nbody_tests.h cli_helpers.h test_presets.h viewer.h nbody_parallel.h nbody_seq.h
+SRC = main.c nbody_seq.c nbody_parallel.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
+HEADERS = nbody.h nbody_seq.h nbody_parallel.h nbody_tests.h cli_helpers.h test_presets.h viewer.h
 
 # --- Default target ---
-all: $(TARGET_SEQ)
+all: $(TARGET)
 
 # ============================================================
-#  Build Targets
+#  Build Rules
 # ============================================================
 
-# Sequential build
-$(TARGET_SEQ): $(SEQ_SRC) $(COMMON_SRC) $(HEADERS)
-	@echo "Building sequential version..."
-	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(SEQ_SRC) $(COMMON_SRC) $(SDL_LIBS) $(LDLIBS)
-
-# Parallel build (optional future extension)
-$(TARGET_PAR): $(PAR_SRC) $(COMMON_SRC) $(HEADERS)
-	@echo "Building parallel version..."
-	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(PAR_SRC) $(COMMON_SRC) -lpthread $(SDL_LIBS) $(LDLIBS)
+$(TARGET): $(SRC) $(HEADERS)
+	@echo "Building unified N-Body simulation (sequential + parallel)..."
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(SRC) $(SDL_LIBS) $(LDLIBS)
 
 # ============================================================
 #  Utility Targets
 # ============================================================
 
-# Clean build artifacts
 clean:
 	@echo "Cleaning build outputs..."
-	rm -f $(TARGET_SEQ) $(TARGET_PAR)
+	rm -f $(TARGET)
 
-# Phony targets
 .PHONY: all clean

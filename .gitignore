@@ -38,5 +38,5 @@ obj/
 *.png
 *.ppm
 
-nbody_seq
+nbody_sim
 .vscode/*

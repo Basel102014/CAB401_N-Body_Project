@@ -26,7 +26,7 @@
  *
  * @return Current time in seconds as a double.
  */
-double now_sec(void);
+static inline double now_sec(void);
 
 /* -------------------------------------------------------------------------
  *  Core simulation routines
