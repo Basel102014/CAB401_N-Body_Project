@@ -5,10 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdbool.h>
-#include "nbody.h"
-#include "viewer.h"
-#include "nbody_tests.h"
-#include "cli_helpers.h"
+#include "nbody_seq.h"
 
 typedef struct
 {

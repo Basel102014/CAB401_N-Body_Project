@@ -3,29 +3,52 @@
 
 #include <stddef.h>
 
-#define G 1e-3                      // Gravitational constant
-#define EPS2 1e-2                   // Softening factor to avoid singularities
-#define DT 1e-3                     // physics dt per substep
-#define M_PI 3.14159265358979323846 // Pi constant
+/* -------------------------------------------------------------------------
+ *  Core N-body simulation types and constants
+ * ------------------------------------------------------------------------- */
 
+/* Gravitational constants and simulation parameters */
+#define G       1e-3   // Gravitational constant (scaled)
+#define EPS2    1e-2   // Softening factor to avoid singularities
+#define DT      1e-3   // Default time step (Δt per substep)
+#define M_PI    3.14159265358979323846 // Pi constant (for geometry)
+
+/* -------------------------------------------------------------------------
+ *  Data structures
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Represents a single body in the simulation.
+ *
+ * Each body stores its mass, position, velocity, and force components.
+ */
 typedef struct
 {
-    double mass;
-    double x, y, z;
-    double vx, vy, vz;
-    double fx, fy, fz;
+    double mass;           // Mass of the body
+    double x, y, z;        // Position
+    double vx, vy, vz;     // Velocity
+    double fx, fy, fz;     // Force accumulator
 } Body;
 
-/* Type for a user-defined setup callback */
+/**
+ * @brief Function pointer type for user-defined setup routines.
+ *
+ * Custom initialisation functions can be passed to init_bodies()
+ * to generate reproducible configurations (e.g., binary star, cluster, etc.).
+ */
 typedef void (*BodySetupFn)(Body *bodies, size_t n);
 
-/* Initialize bodies with values */
+/* -------------------------------------------------------------------------
+ *  Shared API
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Initialise bodies with default or user-defined setup.
+ *
+ * @param bodies      Array of Body structs to initialise.
+ * @param n           Number of bodies.
+ * @param custom_init Optional user-provided setup function.
+ */
 void init_bodies(Body *bodies, size_t n, BodySetupFn custom_init);
-
-/* Compute forces between bodies */
-double compute_forces(Body *bodies, size_t n);
-
-/* Update positions/velocities based on forces */
-double update_bodies(Body *b, size_t n, double dt, double *force_time_out);
 
 #endif /* NBODY_H */
