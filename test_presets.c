@@ -9,7 +9,7 @@ const TestPreset PRESETS[] = {
     { "binary",  setup_binary_star,  2,      500000, 10 },
     { "trinary", setup_trinary_star, 3,     1000000, 10 },
     { "cluster", setup_random_cluster, 50,  1000000, 10 },
-    { "lattice", setup_lattice_grid, 27,    1000000, 10 },
+    { "lattice", setup_lattice_grid, 125,    1000000, 10 },
 };
 
 const size_t PRESET_COUNT = sizeof(PRESETS)/sizeof(PRESETS[0]);

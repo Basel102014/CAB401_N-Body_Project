@@ -26,6 +26,6 @@ void init_bodies(Body *bodies, size_t n, BodySetupFn custom_init);
 double compute_forces(Body *bodies, size_t n);
 
 /* Update positions/velocities based on forces */
-double update_bodies(Body *bodies, size_t n, double dt);
+double update_bodies(Body *b, size_t n, double dt, double *force_time_out);
 
 #endif /* NBODY_H */

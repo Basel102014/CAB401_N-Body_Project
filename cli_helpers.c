@@ -44,6 +44,10 @@ int parse_cli(int argc, char **argv, Options *opt) {
             opt->csv = true;
             continue;
         }
+        if (strcmp(arg, "--noview") == 0) {
+            opt->noview = true;
+            continue;
+        }
 
         if (strncmp(arg, "--", 2) == 0) {
             const char *name = arg + 2;

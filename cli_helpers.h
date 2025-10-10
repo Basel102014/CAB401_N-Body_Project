@@ -11,6 +11,7 @@ typedef struct {
     size_t steps;
     size_t stride;
     bool csv;
+    bool noview;
     BodySetupFn setup;
 } Options;
 

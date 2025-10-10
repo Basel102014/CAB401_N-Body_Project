@@ -108,49 +108,58 @@ double compute_forces(Body *bodies, size_t n)
 }
 
 /* Integrate velocities and positions */
-double update_bodies(Body *bodies, size_t n, double dt)
+double update_bodies(Body *b, size_t n, double dt, double *force_time_out)
 {
     double t0 = now_sec();
 
-    for (size_t i = 0; i < n; ++i)
-    {
-        const double m = bodies[i].mass;
-        if (m <= 0.0)
-            continue;
-        bodies[i].vx += (bodies[i].fx / m) * (0.5 * dt);
-        bodies[i].vy += (bodies[i].fy / m) * (0.5 * dt);
-        bodies[i].vz += (bodies[i].fz / m) * (0.5 * dt);
+    // --- first half-kick + drift ---
+    for (size_t i = 0; i < n; ++i) {
+        double inv_m = 1.0 / b[i].mass;
+        b[i].vx += 0.5 * dt * b[i].fx * inv_m;
+        b[i].vy += 0.5 * dt * b[i].fy * inv_m;
+        b[i].vz += 0.5 * dt * b[i].fz * inv_m;
+
+        b[i].x += b[i].vx * dt;
+        b[i].y += b[i].vy * dt;
+        b[i].z += b[i].vz * dt;
     }
 
-    for (size_t i = 0; i < n; ++i)
-    {
-        bodies[i].x += bodies[i].vx * dt;
-        bodies[i].y += bodies[i].vy * dt;
-        bodies[i].z += bodies[i].vz * dt;
+    double t1 = now_sec();
+
+    // --- force recomputation (mid-step) ---
+    double tf0 = now_sec();
+    compute_forces(b, n);
+    double tf1 = now_sec();
+    double force_t = tf1 - tf0;
+
+    // --- second half-kick ---
+    double t2 = now_sec();
+    for (size_t i = 0; i < n; ++i) {
+        double inv_m = 1.0 / b[i].mass;
+        b[i].vx += 0.5 * dt * b[i].fx * inv_m;
+        b[i].vy += 0.5 * dt * b[i].fy * inv_m;
+        b[i].vz += 0.5 * dt * b[i].fz * inv_m;
     }
 
-    compute_forces(bodies, n);
+    double t3 = now_sec();
 
-    for (size_t i = 0; i < n; ++i)
-    {
-        const double m = bodies[i].mass;
-        if (m <= 0.0)
-            continue;
-        bodies[i].vx += (bodies[i].fx / m) * (0.5 * dt);
-        bodies[i].vy += (bodies[i].fy / m) * (0.5 * dt);
-        bodies[i].vz += (bodies[i].fz / m) * (0.5 * dt);
-    }
+    if (force_time_out)
+        *force_time_out = force_t;
 
-    return now_sec() - t0;
+    // update time = (first half-kick + drift) + (second half-kick)
+    double update_time = (t1 - t0) + (t3 - t2);
+    return update_time;
 }
 
 /* Run one simulation step */
-double sim_step(Body *b, size_t n, double dt, double *force_time, double *update_time)
+double sim_step(Body *b, size_t n, double dt,
+                double *force_time, double *update_time)
 {
     double t0 = now_sec();
-    *force_time = compute_forces(b, n);
-    *update_time = update_bodies(b, n, dt);
-    return now_sec() - t0;
+
+    *update_time = update_bodies(b, n, dt, force_time);
+
+    return now_sec() - t0; // total step time
 }
 
 /* Main entry point */
@@ -160,15 +169,20 @@ int main(int argc, char **argv)
     if (parse_cli(argc, argv, &opt) != 0)
         return EXIT_FAILURE;
 
-    const size_t n       = opt.n;
-    const size_t steps   = opt.steps;
-    const size_t stride  = opt.stride;
-    const bool   save_csv = opt.csv;
-    const double dt      = 1e-3;
+    const size_t n = opt.n;
+    const size_t steps = opt.steps;
+    const size_t stride = opt.stride;
+    const bool save_csv = opt.csv;
+    const bool no_view = opt.noview;
+    const double dt = 1e-3;
     BodySetupFn custom_setup = opt.setup;
 
     Body *bodies = calloc(n, sizeof(Body));
-    if (!bodies) { perror("calloc"); return EXIT_FAILURE; }
+    if (!bodies)
+    {
+        perror("calloc");
+        return EXIT_FAILURE;
+    }
 
     // Initialize bodies (custom setup or random)
     init_bodies(bodies, n, custom_setup);
@@ -177,12 +191,22 @@ int main(int argc, char **argv)
     Snapshots snaps = {
         .xyz = malloc(frames * n * 3 * sizeof(float)),
         .frames = frames,
-        .n = n
-    };
-    if (!snaps.xyz) { perror("malloc"); free(bodies); return EXIT_FAILURE; }
+        .n = n};
+    if (!snaps.xyz)
+    {
+        perror("malloc");
+        free(bodies);
+        return EXIT_FAILURE;
+    }
 
     double *masses = malloc(n * sizeof(double));
-    if (!masses) { perror("malloc"); free(snaps.xyz); free(bodies); return EXIT_FAILURE; }
+    if (!masses)
+    {
+        perror("malloc");
+        free(snaps.xyz);
+        free(bodies);
+        return EXIT_FAILURE;
+    }
     for (size_t i = 0; i < n; ++i)
         masses[i] = bodies[i].mass;
 
@@ -192,16 +216,18 @@ int main(int argc, char **argv)
     double min_total = 1e9, max_total = 0.0;
 
     FILE *fp = NULL;
-    if (save_csv) {
+    if (save_csv)
+    {
         fp = fopen("timing_results.csv", "w");
         if (fp)
-            fprintf(fp, "step,force_time,update_time,total_time\n");
+            fprintf(fp, "step,bodies,force_time,update_time,total_time\n");
         else
             perror("fopen csv");
     }
 
     size_t f = 0;
-    for (size_t s = 0; s < steps; ++s) {
+    for (size_t s = 0; s < steps; ++s)
+    {
         double force_t = 0.0, update_t = 0.0;
         double total_t = sim_step(bodies, n, dt, &force_t, &update_t);
 
@@ -209,28 +235,38 @@ int main(int argc, char **argv)
         total_update += update_t;
         total_sim += total_t;
 
-        if (force_t < min_force) min_force = force_t;
-        if (force_t > max_force) max_force = force_t;
-        if (update_t < min_update) min_update = update_t;
-        if (update_t > max_update) max_update = update_t;
-        if (total_t < min_total) min_total = total_t;
-        if (total_t > max_total) max_total = total_t;
+        if (force_t < min_force)
+            min_force = force_t;
+        if (force_t > max_force)
+            max_force = force_t;
+        if (update_t < min_update)
+            min_update = update_t;
+        if (update_t > max_update)
+            max_update = update_t;
+        if (total_t < min_total)
+            min_total = total_t;
+        if (total_t > max_total)
+            max_total = total_t;
 
         if (save_csv && fp)
-            fprintf(fp, "%zu,%.9f,%.9f,%.9f\n", s, force_t, update_t, total_t);
+            fprintf(fp, "%zu,%zu,%.9f,%.9f,%.9f\n",
+                    s, n, force_t, update_t, total_t);
 
-        if ((s % stride) == 0) {
+        if ((s % stride) == 0)
+        {
             float *dst = snaps.xyz + f * n * 3u;
-            for (size_t i = 0; i < n; ++i) {
-                dst[i*3 + 0] = (float)bodies[i].x;
-                dst[i*3 + 1] = (float)bodies[i].y;
-                dst[i*3 + 2] = (float)bodies[i].z;
+            for (size_t i = 0; i < n; ++i)
+            {
+                dst[i * 3 + 0] = (float)bodies[i].x;
+                dst[i * 3 + 1] = (float)bodies[i].y;
+                dst[i * 3 + 2] = (float)bodies[i].z;
             }
             ++f;
         }
     }
 
-    if (fp) fclose(fp);
+    if (fp)
+        fclose(fp);
 
     // --- Final timing summary ---
     printf("\n--- Timing Results ---\n");
@@ -246,11 +282,11 @@ int main(int argc, char **argv)
     if (save_csv)
         printf("Per-step timing saved to timing_results.csv\n");
 
-    viewer_play(&snaps, masses);
+    if (!no_view)
+        viewer_play(&snaps, masses);
 
     free(masses);
     free(snaps.xyz);
     free(bodies);
     return EXIT_SUCCESS;
 }
-
