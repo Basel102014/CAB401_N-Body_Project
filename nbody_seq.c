@@ -35,16 +35,17 @@ void init_bodies(Body *bodies, size_t n, BodySetupFn custom_init)
 
     const double range = 10.0;
     const double half = range / 2.0;
+    unsigned int seed = 42U;
 
     for (size_t i = 0; i < n; ++i)
     {
         bodies[i].mass = 10.0;
-        bodies[i].x = ((double)rand() / RAND_MAX) * range - half;
-        bodies[i].y = ((double)rand() / RAND_MAX) * range - half;
-        bodies[i].z = ((double)rand() / RAND_MAX) * range - half;
-        bodies[i].vx = ((double)rand() / RAND_MAX) * 0.01 - 0.005;
-        bodies[i].vy = ((double)rand() / RAND_MAX) * 0.01 - 0.005;
-        bodies[i].vz = ((double)rand() / RAND_MAX) * 0.01 - 0.005;
+        bodies[i].x = ((double)rand_r(&seed) / RAND_MAX) * range - half;
+        bodies[i].y = ((double)rand_r(&seed) / RAND_MAX) * range - half;
+        bodies[i].z = ((double)rand_r(&seed) / RAND_MAX) * range - half;
+        bodies[i].vx = ((double)rand_r(&seed) / RAND_MAX) * 0.01 - 0.005;
+        bodies[i].vy = ((double)rand_r(&seed) / RAND_MAX) * 0.01 - 0.005;
+        bodies[i].vz = ((double)rand_r(&seed) / RAND_MAX) * 0.01 - 0.005;
         bodies[i].fx = bodies[i].fy = bodies[i].fz = 0.0;
     }
 }
@@ -105,47 +106,21 @@ double compute_forces(Body *bodies, size_t n)
 }
 
 /* Integrate velocities and positions */
-double update_bodies(Body *b, size_t n, double dt, double *force_time_out)
+double update_bodies(Body *b, size_t n, double dt)
 {
     double t0 = now_sec();
+    for (size_t i = 0; i < n; ++i)
+    {
+        const double inv_m = 1.0 / b[i].mass;
+        b[i].vx += b[i].fx * inv_m * dt; // v(t+dt) = v(t) + a(t)*dt
+        b[i].vy += b[i].fy * inv_m * dt;
+        b[i].vz += b[i].fz * inv_m * dt;
 
-    // --- first half-kick + drift ---
-    for (size_t i = 0; i < n; ++i) {
-        double inv_m = 1.0 / b[i].mass;
-        b[i].vx += 0.5 * dt * b[i].fx * inv_m;
-        b[i].vy += 0.5 * dt * b[i].fy * inv_m;
-        b[i].vz += 0.5 * dt * b[i].fz * inv_m;
-
-        b[i].x += b[i].vx * dt;
+        b[i].x += b[i].vx * dt; // x(t+dt) = x(t) + v(t+dt)*dt
         b[i].y += b[i].vy * dt;
         b[i].z += b[i].vz * dt;
     }
-
-    double t1 = now_sec();
-
-    // --- force recomputation (mid-step) ---
-    double tf0 = now_sec();
-    compute_forces(b, n);
-    double tf1 = now_sec();
-    double force_t = tf1 - tf0;
-
-    // --- second half-kick ---
-    double t2 = now_sec();
-    for (size_t i = 0; i < n; ++i) {
-        double inv_m = 1.0 / b[i].mass;
-        b[i].vx += 0.5 * dt * b[i].fx * inv_m;
-        b[i].vy += 0.5 * dt * b[i].fy * inv_m;
-        b[i].vz += 0.5 * dt * b[i].fz * inv_m;
-    }
-
-    double t3 = now_sec();
-
-    if (force_time_out)
-        *force_time_out = force_t;
-
-    // update time = (first half-kick + drift) + (second half-kick)
-    double update_time = (t1 - t0) + (t3 - t2);
-    return update_time;
+    return now_sec() - t0;
 }
 
 /* Run one simulation step */
@@ -154,7 +129,11 @@ double sim_step(Body *b, size_t n, double dt,
 {
     double t0 = now_sec();
 
-    *update_time = update_bodies(b, n, dt, force_time);
+    // 1) forces from x(t)
+    *force_time = compute_forces(b, n);
+
+    // 2) Euler update using a(t)
+    *update_time = update_bodies(b, n, dt);
 
     return now_sec() - t0; // total step time
 }

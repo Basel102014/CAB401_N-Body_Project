@@ -56,7 +56,7 @@ double compute_forces(Body *bodies, size_t n);
  * @param force_time_out  Optional output for mid-step force computation time.
  * @return Time taken for the update phase (excluding force time).
  */
-double update_bodies(Body *b, size_t n, double dt, double *force_time_out);
+double update_bodies(Body *b, size_t n, double dt);
 
 /**
  * @brief Execute one complete simulation step (update + force).

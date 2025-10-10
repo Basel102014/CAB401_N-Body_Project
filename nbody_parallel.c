@@ -1,217 +1,216 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include <time.h>
 #include <pthread.h>
 #include "nbody_parallel.h"
 
 /* ------------------------ Timing ------------------------ */
-
-static inline double now_sec(void) {
+static inline double now_sec(void)
+{
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
-/* --------------------- Helpers (local) ------------------ */
-
-static inline void zero_acc_range(Force *acc, size_t start, size_t end) {
-    for (size_t i = start; i < end; ++i)
-        acc[i].fx = acc[i].fy = acc[i].fz = 0.0;
-}
-
-/* Race-free force accumulation:
-   Each thread owns i in [start,end) and computes sum over j for acc[i].
-   Shared b[j] reads are fine; each thread writes only its own acc[i]. */
-static inline void compute_forces_range(const Body *b, size_t n,
-                                        size_t start, size_t end,
-                                        Force *acc)
-{
-    for (size_t i = start; i < end; ++i) {
-        const double mi = b[i].mass;
-        const double xi = b[i].x, yi = b[i].y, zi = b[i].z;
-
-        /* Full j loop (skip self); softening avoids singularities. */
-        for (size_t j = 0; j < n; ++j) {
-            if (j == i) continue;
-            const double dx = b[j].x - xi;
-            const double dy = b[j].y - yi;
-            const double dz = b[j].z - zi;
-            const double r2   = dx*dx + dy*dy + dz*dz + EPS2;
-            const double invr = 1.0 / sqrt(r2);
-            const double invr3 = invr * invr * invr;
-            const double s = G * mi * b[j].mass * invr3;
-
-            acc[i].fx += s * dx;
-            acc[i].fy += s * dy;
-            acc[i].fz += s * dz;
-        }
-    }
-}
-
 /* --------------------- Worker Thread -------------------- */
-
 static void *worker(void *arg)
 {
-    ThreadData *td = (ThreadData*)arg;
-    Body  *b   = td->b;
+    ThreadData *td = (ThreadData *)arg;
+    Body *b = td->b;
     Force *acc = td->acc;
-    const size_t n = td->n;
-    const size_t start = td->start, end = td->end;
-    const double dt = td->dt;
+    size_t n = td->n, start = td->start, end = td->end;
+    WorkSync *sync = td->sync;
 
-    for (size_t s = 0; s < td->steps; ++s) {
-        /* Phase A: first half-kick + drift */
-        if (td->force_t_out && start == 0) (void)now_sec(); // placeholder read to avoid unused warnings if you add per-phase timing later
-        for (size_t i = start; i < end; ++i) {
-            const double inv_m = 1.0 / b[i].mass;
-            b[i].vx += 0.5 * dt * b[i].fx * inv_m;
-            b[i].vy += 0.5 * dt * b[i].fy * inv_m;
-            b[i].vz += 0.5 * dt * b[i].fz * inv_m;
+    for (;;)
+    {
+        /* Wait for signal from main */
+        pthread_mutex_lock(&sync->mutex);
+        while (!sync->step_ready && !sync->stop)
+            pthread_cond_wait(&sync->cond_start, &sync->mutex);
+        if (sync->stop)
+        {
+            pthread_mutex_unlock(&sync->mutex);
+            break;
+        }
+        pthread_mutex_unlock(&sync->mutex);
 
-            b[i].x  += b[i].vx * dt;
-            b[i].y  += b[i].vy * dt;
-            b[i].z  += b[i].vz * dt;
+        /* Compute forces for [start, end) */
+        for (size_t i = start; i < end; ++i)
+        {
+            const double mi = b[i].mass;
+            const double xi = b[i].x, yi = b[i].y, zi = b[i].z;
+            double fx = 0.0, fy = 0.0, fz = 0.0;
+
+            for (size_t j = 0; j < n; ++j)
+            {
+                if (j == i)
+                    continue;
+                const double dx = b[j].x - xi;
+                const double dy = b[j].y - yi;
+                const double dz = b[j].z - zi;
+                const double r2 = dx * dx + dy * dy + dz * dz + EPS2;
+                const double invr = 1.0 / sqrt(r2);
+                const double invr3 = invr * invr * invr;
+                const double sF = G * mi * b[j].mass * invr3;
+                fx += sF * dx;
+                fy += sF * dy;
+                fz += sF * dz;
+            }
+
+            acc[i].fx = fx;
+            acc[i].fy = fy;
+            acc[i].fz = fz;
         }
 
-        /* Barrier #1: ensure all positions are updated before force reads */
-        pthread_barrier_wait(td->barrier);
-
-        /* Phase B: compute forces at x(t+dt) */
-        double tF0 = 0.0, tF1 = 0.0;
-        if (td->force_t_out && start == 0) tF0 = now_sec();
-
-        zero_acc_range(acc, start, end);
-        compute_forces_range(b, n, start, end, acc);
-
-        /* Barrier #2: ensure all acc[i] totals are complete */
-        pthread_barrier_wait(td->barrier);
-
-        if (td->force_t_out && start == 0) {
-            tF1 = now_sec();
-            td->force_t_out[s] = (tF1 - tF0);
+        /* Notify main thread */
+        pthread_mutex_lock(&sync->mutex);
+        if (++sync->workers_done == td->num_threads)
+        {
+            sync->step_ready = 0;
+            pthread_cond_signal(&sync->cond_done);
         }
-
-        /* Phase C: second half-kick (using new forces) */
-        for (size_t i = start; i < end; ++i) {
-            const double inv_m = 1.0 / b[i].mass;
-            b[i].vx += 0.5 * dt * acc[i].fx * inv_m;
-            b[i].vy += 0.5 * dt * acc[i].fy * inv_m;
-            b[i].vz += 0.5 * dt * acc[i].fz * inv_m;
-
-            /* Keep forces on Body for the next step’s first half-kick (viewer/debug) */
-            b[i].fx = acc[i].fx;
-            b[i].fy = acc[i].fy;
-            b[i].fz = acc[i].fz;
-        }
-
-        /* Barrier #3: ensure all velocities are final before next step */
-        pthread_barrier_wait(td->barrier);
+        pthread_mutex_unlock(&sync->mutex);
     }
 
     return NULL;
 }
 
-/* ----------------- Public Entry Point (API) -------------- */
-
+/* ----------------- Public Entry Point -------------------- */
 int run_nbody_parallel(Body *bodies,
-                       size_t n, size_t steps, double dt,
+                       size_t n,
+                       size_t steps,
+                       double dt,
                        size_t num_threads,
-                       double *avg_force_time,   /* out, nullable */
-                       double *avg_update_time)  /* out, nullable */
+                       double *avg_force_time,
+                       double *avg_update_time,
+                       size_t stride,
+                       Snapshots *snaps,
+                       double *total_time_out)
 {
-    int rc = 0;
+    if (!bodies || n == 0 || steps == 0 || num_threads == 0)
+        return -1;
 
-    if (!bodies || n == 0 || steps == 0 || num_threads == 0) return -1;
+    pthread_t *threads = calloc(num_threads, sizeof(*threads));
+    ThreadData *td = calloc(num_threads, sizeof(*td));
+    Force *acc = calloc(n, sizeof(*acc));
+    WorkSync sync;
 
-    pthread_t   *ths = NULL;
-    ThreadData  *td  = NULL;
-    Force       *acc = NULL;
-    double      *force_t_series = NULL;
-
-    pthread_barrier_t barrier;
-    int barrier_inited = 0;
-
-    ths = (pthread_t*)  calloc(num_threads, sizeof(*ths));
-    td  = (ThreadData*) calloc(num_threads, sizeof(*td));
-    acc = (Force*)      calloc(n, sizeof(*acc));
-    force_t_series = (double*)calloc(steps, sizeof(double));  /* thread 0 writes */
-
-    if (!ths || !td || !acc || !force_t_series) { rc = -1; goto cleanup; }
-
-    /* Initial force computation (so first half-kick uses correct a(t)) */
-    zero_acc_range(acc, 0, n);
-    compute_forces_range(bodies, n, 0, n, acc);
-    for (size_t i = 0; i < n; ++i) {
-        bodies[i].fx = acc[i].fx;
-        bodies[i].fy = acc[i].fy;
-        bodies[i].fz = acc[i].fz;
+    if (!threads || !td || !acc)
+    {
+        perror("calloc");
+        return -1;
     }
 
-    if (pthread_barrier_init(&barrier, NULL, (unsigned)num_threads) != 0) {
-        perror("pthread_barrier_init");
-        rc = -1; goto cleanup;
-    }
-    barrier_inited = 1;
+    pthread_mutex_init(&sync.mutex, NULL);
+    pthread_cond_init(&sync.cond_start, NULL);
+    pthread_cond_init(&sync.cond_done, NULL);
+    sync.step_ready = 0;
+    sync.workers_done = 0;
+    sync.stop = 0;
 
-    /* Partition */
+    /* Partition bodies */
     const size_t chunk = (n + num_threads - 1) / num_threads;
 
-    /* Launch workers */
-    const double t_sim_start = now_sec();
-    for (size_t t = 0; t < num_threads; ++t) {
-        const size_t start = t * chunk;
-        const size_t end   = (start < n) ? ((start + chunk > n) ? n : start + chunk) : n;
+    for (size_t t = 0; t < num_threads; ++t)
+    {
+        size_t start = t * chunk;
+        size_t end = (start + chunk > n) ? n : start + chunk;
+        td[t] = (ThreadData){
+            .b = bodies,
+            .acc = acc,
+            .n = n,
+            .start = start,
+            .end = end,
+            .num_threads = num_threads,
+            .sync = &sync};
+        pthread_create(&threads[t], NULL, worker, &td[t]);
+    }
 
-        td[t].b = bodies;
-        td[t].acc = acc;
-        td[t].n = n;
-        td[t].start = start;
-        td[t].end = end;
-        td[t].dt = dt;
-        td[t].steps = steps;
-        td[t].barrier = &barrier;
-        td[t].force_t_out = (t == 0 ? force_t_series : NULL);
+    /* Simulation loop */
+    double total_force_time = 0.0, total_update_time = 0.0;
+    const double t0 = now_sec();
 
-        if (pthread_create(&ths[t], NULL, worker, &td[t]) != 0) {
-            perror("pthread_create");
-            rc = -1;
-            /* Try to join any already created threads */
-            for (size_t j = 0; j < t; ++j) pthread_join(ths[j], NULL);
-            goto cleanup;
+    for (size_t s = 0; s < steps; ++s)
+    {
+        const double tf0 = now_sec();
+
+        pthread_mutex_lock(&sync.mutex);
+        sync.step_ready = 1;
+        sync.workers_done = 0;
+        pthread_cond_broadcast(&sync.cond_start);
+        pthread_mutex_unlock(&sync.mutex);
+
+        pthread_mutex_lock(&sync.mutex);
+        while (sync.workers_done < num_threads)
+            pthread_cond_wait(&sync.cond_done, &sync.mutex);
+        pthread_mutex_unlock(&sync.mutex);
+
+        total_force_time += (now_sec() - tf0);
+
+        /* Copy acc → bodies */
+        for (size_t i = 0; i < n; ++i)
+        {
+            bodies[i].fx = acc[i].fx;
+            bodies[i].fy = acc[i].fy;
+            bodies[i].fz = acc[i].fz;
+        }
+
+        /* Euler update */
+        const double tu0 = now_sec();
+        for (size_t i = 0; i < n; ++i)
+        {
+            const double inv_m = 1.0 / bodies[i].mass;
+            bodies[i].vx += bodies[i].fx * inv_m * dt;
+            bodies[i].vy += bodies[i].fy * inv_m * dt;
+            bodies[i].vz += bodies[i].fz * inv_m * dt;
+            bodies[i].x += bodies[i].vx * dt;
+            bodies[i].y += bodies[i].vy * dt;
+            bodies[i].z += bodies[i].vz * dt;
+        }
+        total_update_time += (now_sec() - tu0);
+
+        /* Save snapshot */
+        if (snaps && (s % stride) == 0)
+        {
+            size_t frame_index = s / stride;
+            float *dst = snaps->xyz + frame_index * n * 3u;
+            for (size_t i = 0; i < n; ++i)
+            {
+                dst[i * 3 + 0] = (float)bodies[i].x;
+                dst[i * 3 + 1] = (float)bodies[i].y;
+                dst[i * 3 + 2] = (float)bodies[i].z;
+            }
         }
     }
 
-    for (size_t t = 0; t < num_threads; ++t) pthread_join(ths[t], NULL);
-    const double t_sim_end = now_sec();
+    const double total_time = now_sec() - t0;
 
-    /* Averages */
-    const double total_sim  = t_sim_end - t_sim_start;
-    const double avg_total  = total_sim / (double)steps;
+    /* Clean shutdown */
+    pthread_mutex_lock(&sync.mutex);
+    sync.stop = 1;
+    sync.step_ready = 1;
+    pthread_cond_broadcast(&sync.cond_start);
+    pthread_mutex_unlock(&sync.mutex);
 
-    double sum_force = 0.0;
-    for (size_t s = 0; s < steps; ++s) sum_force += force_t_series[s];
-    const double avg_force  = sum_force / (double)steps;
-    const double avg_update = avg_total - avg_force;
+    for (size_t t = 0; t < num_threads; ++t)
+        pthread_join(threads[t], NULL);
 
-    if (avg_force_time)  *avg_force_time  = avg_force;
-    if (avg_update_time) *avg_update_time = avg_update;
+    /* Output results */
+    if (avg_force_time)
+        *avg_force_time = total_force_time / (double)steps;
+    if (avg_update_time)
+        *avg_update_time = total_update_time / (double)steps;
+    if (total_time_out)
+        *total_time_out = total_time;
 
-    /* Optional: summary print (comment out if you want a quiet library call) */
-    printf("\n--- Parallel Timing Summary ---\n");
-    printf("Threads: %zu\n", num_threads);
-    printf("Bodies : %zu\nSteps: %zu\n", n, steps);
-    printf("Avg Force Time : %.8f s\n", avg_force);
-    printf("Avg Update Time: %.8f s\n", avg_update);
-    printf("Avg Total Step : %.8f s\n", avg_total);
-    printf("Total Time     : %.8f s\n", total_sim);
-
-cleanup:
-    if (barrier_inited) pthread_barrier_destroy(&barrier);
-    free(force_t_series);
+    pthread_mutex_destroy(&sync.mutex);
+    pthread_cond_destroy(&sync.cond_start);
+    pthread_cond_destroy(&sync.cond_done);
     free(acc);
     free(td);
-    free(ths);
-    return rc;
+    free(threads);
+    return 0;
 }
