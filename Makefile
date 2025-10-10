@@ -1,42 +1,34 @@
 # ============================================================
-#  N-Body Simulation (Sequential + Parallel Unified Build)
+#  Fast build for numeric workloads (multi-threaded, math-heavy)
 # ============================================================
 
-# --- Compiler and flags ---
 CC       = gcc
-CSTD     = -std=c11
-WARN     = -Wall -Wextra -Wpedantic
-OPT      = -O2
-CFLAGS   = $(CSTD) $(WARN) $(OPT)
+CSTD     = -std=c17
+WARN     = -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-variable
 
-# --- SDL2 detection (fallback to pkg-config if sdl2-config missing) ---
+# --- Optimisation flags ---
+OPT      = -O3 -march=native -ffast-math -funroll-loops -fno-math-errno \
+           -fno-trapping-math -fomit-frame-pointer -ftree-vectorize \
+           -falign-functions=32 -falign-loops=32 -fstrict-aliasing
+
+# --- Thread & SIMD safety ---
+CFLAGS   = $(CSTD) $(WARN) $(OPT) -pthread
+
+# --- SDL2 (viewer) ---
 SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null || pkg-config --cflags sdl2 2>/dev/null)
 SDL_LIBS   := $(shell sdl2-config --libs   2>/dev/null || pkg-config --libs   sdl2 2>/dev/null)
 
-# --- Libraries ---
 LDLIBS = -lm -lpthread
 
-# --- Target ---
 TARGET = nbody_sim
-
-# --- Source files ---
-SRC = main.c nbody_seq.c nbody_parallel.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
+SRC    = main.c nbody_seq.c nbody_parallel.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
 HEADERS = nbody.h nbody_seq.h nbody_parallel.h nbody_tests.h cli_helpers.h test_presets.h viewer.h
 
-# --- Default target ---
 all: $(TARGET)
 
-# ============================================================
-#  Build Rules
-# ============================================================
-
 $(TARGET): $(SRC) $(HEADERS)
-	@echo "Building unified N-Body simulation (sequential + parallel)..."
+	@echo "Building N-Body Simulation (Optimised, Parallel)..."
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(SRC) $(SDL_LIBS) $(LDLIBS)
-
-# ============================================================
-#  Utility Targets
-# ============================================================
 
 clean:
 	@echo "Cleaning build outputs..."
