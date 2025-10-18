@@ -21,8 +21,14 @@ SDL_LIBS   := $(shell sdl2-config --libs   2>/dev/null || pkg-config --libs   sd
 LDLIBS = -lm -lpthread
 
 TARGET = nbody_sim
-SRC    = main.c nbody_seq.c nbody_parallel.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
+TEST_TARGET = test_suite
+
+SRC = main.c nbody_seq.c nbody_parallel.c nbody_tests.c cli_helpers.c test_presets.c viewer.c
 HEADERS = nbody.h nbody_seq.h nbody_parallel.h nbody_tests.h cli_helpers.h test_presets.h viewer.h
+
+# ============================================================
+#  Build Targets
+# ============================================================
 
 all: $(TARGET)
 
@@ -30,8 +36,27 @@ $(TARGET): $(SRC) $(HEADERS)
 	@echo "Building N-Body Simulation (Optimised, Parallel)..."
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $@ $(SRC) $(SDL_LIBS) $(LDLIBS)
 
+# ============================================================
+#  Test Suite (Validation and Correctness Checks)
+# ============================================================
+
+TEST_SRC = test_suite.c
+TEST_DEPS = nbody_seq.o nbody_parallel.o nbody_tests.o test_presets.o cli_helpers.o
+
+$(TEST_TARGET): $(TEST_SRC) $(TEST_DEPS)
+	@echo "Building Validation Test Suite..."
+	$(CC) $(CFLAGS) -o $@ $(TEST_SRC) $(TEST_DEPS) $(LDLIBS)
+
+test: $(TEST_TARGET)
+	@echo "Running Validation Test Suite..."
+	./$(TEST_TARGET)
+
+# ============================================================
+#  Utility Targets
+# ============================================================
+
 clean:
 	@echo "Cleaning build outputs..."
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(TEST_TARGET) *.o
 
-.PHONY: all clean
+.PHONY: all clean test
