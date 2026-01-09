@@ -1,55 +1,85 @@
-# N‑Body Simulation (3D)
+# CAB401 Parallelisation Project – N-Body Simulation (3D)
 
-A high‑performance 3D N‑Body gravitational simulation written in C.
+A high-performance **3D N-Body gravitational simulation** written in **C**, featuring both **sequential** and **parallel (POSIX Threads)** implementations. This project was developed for CAB401 and represents a **complete, end-to-end parallelisation study**, including correctness validation, benchmarking, and performance analysis.
 
-This project was developed as part of a university parallel and systems programming unit and represents a **complete implementation**, including:
-- a reference **sequential solver**
-- a **parallel solver using POSIX threads**
-- a real‑time **SDL2 visualiser**
-- benchmarking and correctness testing (documented in the accompanying report)
+The simulation models Newtonian gravitational interactions between many bodies and demonstrates how low-level data layout and explicit parallel decomposition impact scalability on modern CPUs.
 
-The project focuses on low‑level data layout, numerical integration, and performance scaling on modern CPUs.
+All simulations are **deterministic**: runs with identical parameters produce identical results due to fixed seeding during initialisation.
 
 ---
 
 ## Overview
 
-The simulation models a system of point masses interacting via Newtonian gravity in three dimensions. Forces are computed pairwise with softening to avoid singularities, and motion is integrated forward in time using a symplectic method.
+The program is built as a **single binary** that selects execution mode at runtime via a thread count:
 
-The codebase was intentionally written at a low level (plain C, no external physics libraries) to make data flow, performance bottlenecks, and parallelisation strategies explicit.
+- **Sequential mode**: `--threads=1` (reference implementation)
+- **Parallel mode**: `--threads>1` (POSIX Threads-based solver)
+
+Optional components included in the project:
+
+- **Validation suite** (`test_suite.c`) — verifies numerical equivalence between sequential and parallel solvers
+- **SDL2 Viewer** (`viewer.c`) — optional real-time 3D visualisation with free-fly camera
+- **Test presets** (`test_presets.c/h`) — predefined starting configurations (solar system, binary/trinary systems, clusters, lattice grids)
+- **Benchmarking scripts** — automated performance measurement and CSV output
+
+The sequential solver was implemented first and serves as the **ground-truth reference**, making correctness verification of the parallel solver explicit and robust.
 
 ---
 
 ## Features
 
-- 3D Newtonian gravity with softening (EPS2)
-- Fully implemented **sequential solver** (reference implementation)
-- Fully implemented **parallel solver using PThreads** (pairwise O(N²) workload split)
-- Real‑time SDL2 viewer with free‑fly camera
-- Depth‑sorted sprite rendering with perspective scaling
-- Tweakable integrator parameters: `DT`, `SUBSTEPS`, `G`, `EPS2`
-- Deterministic test presets and benchmarking support
+- 3D Newtonian gravity with softening (`EPS2`)
+- Deterministic initialisation (fixed random seed)
+- Fully implemented **sequential solver**
+- Fully implemented **parallel solver using POSIX Threads**
+- Pairwise O(N²) force computation with explicit workload partitioning
+- Real-time SDL2 visualiser with perspective camera
+- Depth-sorted sprite rendering with distance-based scaling and dimming
+- Configurable integrator parameters (`DT`, `SUBSTEPS`, `G`, `EPS2`)
+- Automated validation and benchmarking support
 
 ---
 
 ## Repository Layout
 
-- `nbody.h` — Body struct, physical constants, shared prototypes
-- `nbody_seq.c` — Sequential physics solver and simulation loop
-- `nbody_parallel.c` — Parallel solver using POSIX threads
-- `viewer.h` / `viewer.c` — SDL2 renderer and camera controls
 - `main.c` — Program entry point and CLI handling
-- `test_suite.c`, `nbody_tests.c`, `test_presets.c` — Correctness tests and presets
-- `benchmark.sh` — Performance benchmarking script
-- `Makefile` — Build targets for sequential and parallel binaries
+- `nbody.h` — Body structure, physical constants, shared prototypes
+- `nbody_seq.c` — Sequential physics solver (reference implementation)
+- `nbody_parallel.c` — Parallel solver using POSIX Threads
+- `viewer.h` / `viewer.c` — SDL2 renderer and camera controls
+- `test_suite.c` — Validation harness for solver equivalence
+- `nbody_tests.c` — Core correctness tests
+- `test_presets.c/h` — Predefined simulation setups
+- `benchmark.sh` — Automated benchmarking script
+- `Makefile` — Build targets for sequential, parallel, and test binaries
+- `cab401-report.pdf` — Detailed performance analysis and discussion
 
 ---
 
-## Prerequisites
+## Hardware Requirements
 
-- GCC or Clang
-- Make
-- SDL2 development headers (viewer only)
+### Minimum
+- Dual-core x86_64 CPU
+- 4 GB RAM
+- ~100 MB available storage
+- Linux-based OS (tested on Ubuntu 22.04)
+
+### Recommended
+- 8-core x86_64 CPU
+- ≥8 GB RAM
+- Modern cache-heavy CPUs benefit parallel performance
+- SDL2 development libraries for visualisation
+- Valgrind / Callgrind for profiling (optional)
+
+---
+
+## Software Requirements
+
+- **Compiler**: GCC 13.2.0+ or Clang (C11)
+- **Libraries**:
+  - POSIX Threads (`libpthread`)
+  - Math library (`libm`)
+  - SDL2 (optional, viewer only)
 
 ### Installing SDL2
 
@@ -65,69 +95,98 @@ brew install sdl2
 
 ---
 
-## Building
+## Compilation
 
 Using the provided Makefile (recommended):
 ```bash
 make
 ```
 
-This produces:
-- `nbody_seq` — sequential solver with SDL2 visualiser
-- `nbody_parallel` — parallel solver
+This produces a single executable (e.g. `nbody_sim`).
 
-Manual build (Linux/macOS, sequential only):
+### Build and Run Tests
 ```bash
-gcc -O2 -std=c11 -Wall -Wextra -Wpedantic \
-    nbody_seq.c viewer.c main.c -lm \
-    $(sdl2-config --cflags --libs) -o nbody_seq
+make test
+```
+
+### Clean
+```bash
+make clean
+```
+
+> **Note:** Binary names may vary depending on the Makefile configuration. The examples below assume `./nbody_sim`.
+
+---
+
+## Running the Simulation
+
+Execution mode is selected at runtime using `--threads`.
+
+### Common Flags
+
+- `--bodies=N`   number of bodies
+- `--steps=N`    total simulation steps
+- `--stride=N`   snapshot stride (default: 10)
+- `--threads=N`  1 = sequential, >1 = parallel (default: 1)
+- `--csv`        write per-run timing to `timing_results.csv`
+- `--noview`     disable SDL2 viewer
+
+### Presets
+
+- `--solar`
+- `--binary`
+- `--trinary`
+- `--cluster`
+- `--lattice`
+
+### Examples
+
+Sequential baseline:
+```bash
+./nbody_sim --bodies=2000 --steps=5000 --threads=1 --noview
+```
+
+Parallel run (8 threads):
+```bash
+./nbody_sim --bodies=2000 --steps=5000 --threads=8 --noview
+```
+
+Solar system preset with CSV timing:
+```bash
+./nbody_sim --solar --csv
 ```
 
 ---
 
-## Running
+## Predefined Simulation Presets
 
-### Sequential
+Preset defaults are defined in `test_presets.c`. Command-line arguments override preset defaults.
 
-```bash
-./nbody_seq <number_of_particles> <timesteps>
-```
-
-Notes:
-- `timesteps = 0` runs the simulation until the window is closed
-- Otherwise, the simulation advances until exactly `<timesteps>` substeps have been simulated, then exits
-
-Examples:
-```bash
-./nbody_seq 200 0
-./nbody_seq 1500 100000
-```
-
-### Parallel
-
-```bash
-./nbody_parallel <number_of_particles> <timesteps> <threads>
-```
-
-The parallel solver partitions the O(N²) force computation across worker threads and synchronises per‑step updates.
+| Preset      | Bodies | Steps     | Stride | Description |
+|------------|--------|-----------|--------|-------------|
+| `--solar`   | 9      | 1,000,000 | 10     | Sun + 8 planets |
+| `--binary`  | 2      | 500,000   | 10     | Two-body orbit |
+| `--trinary` | 3      | 1,000,000 | 10     | Three-body rotating system |
+| `--cluster` | 50     | 1,000,000 | 10     | Randomised cluster |
+| `--lattice` | 3375   | 10,000    | 10     | Perfect-cube lattice |
 
 ---
 
-## Viewer Controls
+## Viewer Controls (SDL2)
 
 - **W / S** — forward / backward
 - **A / D** — strafe left / right
 - **Q / E** — move down / up
 - **Arrow keys** — look around (yaw / pitch)
 - **Space** — pause / resume simulation
-- **R** — reset camera to look‑at‑origin pose
+- **R** — reset camera to look-at-origin pose
 - **Esc** — quit
 
 ---
 
 ## Physics Model
 
-Bodies are modelled as point masses interacting under Newtonian gravity:
+Bodies are treated as point masses interacting under Newtonian gravity:
 
 ```
 F_ij = G · m_i · m_j / (r² + EPS2)^(3/2) · r⃗
@@ -135,38 +194,24 @@ F_ij = G · m_i · m_j / (r² + EPS2)^(3/2) · r⃗
 
 Softening (`EPS2`) prevents numerical instability during close encounters.
 
-### Integration
+### Integration Scheme
 
-A semi‑implicit (symplectic) Euler integrator is used:
+A semi-implicit (symplectic) Euler integrator is used:
 
 ```
 v(t + Δt) = v(t) + a(t) · Δt
 x(t + Δt) = x(t) + v(t + Δt) · Δt
 ```
 
-Forces are computed pairwise using Newton’s third law to avoid double‑counting.
+Forces are computed pairwise using Newton’s third law to avoid double-counting.
 
 ---
 
-## Tuning and Defaults
+## Performance and Scaling
 
-- `G` (in `nbody.h`) — gravitational constant (default: `1.0`)
-- `EPS2` (in `nbody.h`) — softening factor (typical range: `1e‑6` to `1e‑2`)
-- `DT` (in `viewer`) — per‑substep timestep (default: `1e‑3`)
-- `SUBSTEPS` (in `viewer`) — physics substeps per frame (default: `8`)
+Benchmarking demonstrates strong parallel scaling with increasing thread counts, including **near-superlinear speedup** in some configurations. This behaviour is attributed to improved cache locality as the workload is partitioned across cores on modern CPUs.
 
-### Stability Tips
-
-- If close encounters cause instability, reduce `DT`, increase `SUBSTEPS`, and/or increase `EPS2`
-- For visually pleasing demos, initialise bodies with small transverse velocities
-
----
-
-## Performance Notes
-
-Benchmarking shows strong scaling with increasing thread counts, including near‑superlinear speedup in some configurations due to improved cache locality on modern CPUs.
-
-Detailed performance analysis and correctness validation are documented in the accompanying project report.
+Detailed performance results, validation methodology, and discussion of scaling limits are provided in `cab401-report.pdf`.
 
 ---
 
@@ -179,5 +224,6 @@ MIT
 ## Author
 
 **Bailey Rossiter**  
+Student ID: 11326158  
 Queensland University of Technology
 
