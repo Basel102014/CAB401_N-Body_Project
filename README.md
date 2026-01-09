@@ -1,89 +1,183 @@
-# N-Body Simulation (3D)
+# N‑Body Simulation (3D)
 
-A simple, fast 3D N-Body gravitational simulation in C.
-Includes a sequential solver. The sequential build has an SDL2 viewer for real-time visualization with a free-fly camera.
+A high‑performance 3D N‑Body gravitational simulation written in C.
+
+This project was developed as part of a university parallel and systems programming unit and represents a **complete implementation**, including:
+- a reference **sequential solver**
+- a **parallel solver using POSIX threads**
+- a real‑time **SDL2 visualiser**
+- benchmarking and correctness testing (documented in the accompanying report)
+
+The project focuses on low‑level data layout, numerical integration, and performance scaling on modern CPUs.
+
+---
+
+## Overview
+
+The simulation models a system of point masses interacting via Newtonian gravity in three dimensions. Forces are computed pairwise with softening to avoid singularities, and motion is integrated forward in time using a symplectic method.
+
+The codebase was intentionally written at a low level (plain C, no external physics libraries) to make data flow, performance bottlenecks, and parallelisation strategies explicit.
+
+---
 
 ## Features
+
 - 3D Newtonian gravity with softening (EPS2)
-- Sequential solver (reference implementation)
-- Parallel solver using PThreads (pairwise O(N^2) split)
-- SDL2 viewer (depth-sorted sprites, perspective camera, gentle depth dim/size)
-- Tweakable integrator params: DT, SUBSTEPS, G, EPS2
+- Fully implemented **sequential solver** (reference implementation)
+- Fully implemented **parallel solver using PThreads** (pairwise O(N²) workload split)
+- Real‑time SDL2 viewer with free‑fly camera
+- Depth‑sorted sprite rendering with perspective scaling
+- Tweakable integrator parameters: `DT`, `SUBSTEPS`, `G`, `EPS2`
+- Deterministic test presets and benchmarking support
+
+---
 
 ## Repository Layout
-- nbody.h          — Body struct, G/EPS2 defines, prototypes
-- nbody_seq.c      — physics + main (sequential)
-- viewer.h / viewer.c — SDL2 renderer and camera controls
-- nbody_parallel.c — parallel version (not implemented)
-- Makefile         — builds seq (with SDL2) and keeps tree clean (no .o files)
+
+- `nbody.h` — Body struct, physical constants, shared prototypes
+- `nbody_seq.c` — Sequential physics solver and simulation loop
+- `nbody_parallel.c` — Parallel solver using POSIX threads
+- `viewer.h` / `viewer.c` — SDL2 renderer and camera controls
+- `main.c` — Program entry point and CLI handling
+- `test_suite.c`, `nbody_tests.c`, `test_presets.c` — Correctness tests and presets
+- `benchmark.sh` — Performance benchmarking script
+- `Makefile` — Build targets for sequential and parallel binaries
+
+---
 
 ## Prerequisites
+
 - GCC or Clang
 - Make
-- SDL2 dev headers (viewer only)
-  - Ubuntu/Debian: sudo apt-get install libsdl2-dev
-  - macOS (Homebrew): brew install sdl2
+- SDL2 development headers (viewer only)
+
+### Installing SDL2
+
+**Ubuntu / Debian**
+```bash
+sudo apt-get install libsdl2-dev
+```
+
+**macOS (Homebrew)**
+```bash
+brew install sdl2
+```
+
+---
 
 ## Building
 
 Using the provided Makefile (recommended):
-- make
+```bash
+make
+```
 
-One-liner without Makefile (Linux/macOS):
-- gcc -O2 -std=c11 -Wall -Wextra -Wpedantic nbody_seq.c viewer.c -lm $(sdl2-config --cflags --libs) -o nbody_seq
+This produces:
+- `nbody_seq` — sequential solver with SDL2 visualiser
+- `nbody_parallel` — parallel solver
+
+Manual build (Linux/macOS, sequential only):
+```bash
+gcc -O2 -std=c11 -Wall -Wextra -Wpedantic \
+    nbody_seq.c viewer.c main.c -lm \
+    $(sdl2-config --cflags --libs) -o nbody_seq
+```
+
+---
 
 ## Running
 
-Sequential:
-- ./nbody_seq <number_of_particles> <timesteps>
+### Sequential
+
+```bash
+./nbody_seq <number_of_particles> <timesteps>
+```
 
 Notes:
-- timesteps = 0 → run until window close
-- Otherwise, the viewer advances physics until exactly <timesteps> substeps have been simulated (bundled as SUBSTEPS per frame), then exits.
+- `timesteps = 0` runs the simulation until the window is closed
+- Otherwise, the simulation advances until exactly `<timesteps>` substeps have been simulated, then exits
 
 Examples:
-- ./nbody_seq 200 0
-- ./nbody_seq 1500 100000
+```bash
+./nbody_seq 200 0
+./nbody_seq 1500 100000
+```
 
-Parallel (not implemented yet):
-- ./nbody_parallel <number_of_particles> <timesteps> <threads>
+### Parallel
 
-## Controls (Viewer)
-- W / S: forward / backward
-- A / D: strafe left / right
-- Q / E: move down / up
-- Arrow keys: look around (yaw/pitch)
-- Space: pause/resume simulation
-- R: reset camera to a look-at-origin pose (about −30 degrees)
-- Esc: quit
+```bash
+./nbody_parallel <number_of_particles> <timesteps> <threads>
+```
+
+The parallel solver partitions the O(N²) force computation across worker threads and synchronises per‑step updates.
+
+---
+
+## Viewer Controls
+
+- **W / S** — forward / backward
+- **A / D** — strafe left / right
+- **Q / E** — move down / up
+- **Arrow keys** — look around (yaw / pitch)
+- **Space** — pause / resume simulation
+- **R** — reset camera to look‑at‑origin pose
+- **Esc** — quit
+
+---
 
 ## Physics Model
-Bodies are point masses with gravitational force:
-- F_ij = G * m_i * m_j / (r^2 + EPS2)^(3/2) * r_vec
 
-Integrator: semi-implicit (symplectic) Euler
-- v(t+dt) = v(t) + a(t) * dt
-- x(t+dt) = x(t) + v(t+dt) * dt
+Bodies are modelled as point masses interacting under Newtonian gravity:
 
-Forces are computed pairwise with Newton’s 3rd law to avoid double-counting.
+```
+F_ij = G · m_i · m_j / (r² + EPS2)^(3/2) · r⃗
+```
+
+Softening (`EPS2`) prevents numerical instability during close encounters.
+
+### Integration
+
+A semi‑implicit (symplectic) Euler integrator is used:
+
+```
+v(t + Δt) = v(t) + a(t) · Δt
+x(t + Δt) = x(t) + v(t + Δt) · Δt
+```
+
+Forces are computed pairwise using Newton’s third law to avoid double‑counting.
+
+---
 
 ## Tuning and Defaults
-- G (in nbody.h): gravitational constant (default 1.0)
-- EPS2 (in nbody.h): softening (try 1e-6 to 1e-2)
-- DT (in viewer): per-substep timestep (default 1e-3)
-- SUBSTEPS (in viewer): physics substeps per frame (default 8)
 
-Viewer sprite sizing:
-- RMIN_PX, RMAX_PX: base pixel radius range (mass to pixels)
-- Distance scaling uses a reference Z_REF so near objects can appear larger and far ones smaller, without blowing up in size.
+- `G` (in `nbody.h`) — gravitational constant (default: `1.0`)
+- `EPS2` (in `nbody.h`) — softening factor (typical range: `1e‑6` to `1e‑2`)
+- `DT` (in `viewer`) — per‑substep timestep (default: `1e‑3`)
+- `SUBSTEPS` (in `viewer`) — physics substeps per frame (default: `8`)
 
-Stability tips:
-- If close encounters explode, reduce DT or increase SUBSTEPS, and/or increase EPS2.
-- For prettier demos, add small random transverse velocities in init_bodies.
+### Stability Tips
 
-## License
+- If close encounters cause instability, reduce `DT`, increase `SUBSTEPS`, and/or increase `EPS2`
+- For visually pleasing demos, initialise bodies with small transverse velocities
+
+---
+
+## Performance Notes
+
+Benchmarking shows strong scaling with increasing thread counts, including near‑superlinear speedup in some configurations due to improved cache locality on modern CPUs.
+
+Detailed performance analysis and correctness validation are documented in the accompanying project report.
+
+---
+
+## Licence
+
 MIT
 
+---
+
 ## Author
-Bailey Rossiter
+
+**Bailey Rossiter**  
 Queensland University of Technology
+
